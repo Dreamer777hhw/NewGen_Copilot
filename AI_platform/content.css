@@ -1,0 +1,5 @@
+/* 这里添加你的CSS样式 */
+.extension-highlight {
+  border: 2px solid red !important;
+  background-color: rgba(255, 0, 0, 0.1) !important;
+} 
