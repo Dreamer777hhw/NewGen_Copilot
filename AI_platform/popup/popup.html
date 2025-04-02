@@ -97,6 +97,35 @@
     </select>
   </div>
   
+  <!-- 管理场景按钮 -->
+  <button id="manageScenesButton" style="width: 100%; background-color: #fbbc05; color: #333;">管理场景</button>
+  
+  <!-- 管理场景视图 -->
+<div id="sceneManagementView" style="display: none; margin-top: 10px;">
+  <h2>管理场景</h2>
+  <div id="sceneList" style="margin-bottom: 10px;">
+    <!-- 场景列表将通过 JavaScript 动态生成 -->
+  </div>
+  <button id="addSceneButton" style="width: 100%; background-color: #34a853; color: white;">添加场景</button>
+  <button id="backButton" style="width: 100%; background-color: #4285f4; color: white; margin-top: 10px;">返回</button>
+</div>
+
+<!-- 编辑场景视图 -->
+<div id="sceneEditView" style="display: none; margin-top: 10px;">
+  <h2>编辑场景</h2>
+  <div class="input-container">
+    <div class="input-label">场景名称：</div>
+    <input id="editSceneName" type="text" style="width: 100%; padding: 5px; margin-bottom: 10px;" />
+  </div>
+  <div class="input-container">
+    <div class="input-label">Prompt 内容：</div>
+    <textarea id="editScenePrompt" rows="5" style="width: 100%; padding: 5px; resize: none;"></textarea>
+  </div>
+  <button id="deleteSceneButton" style="width: 100%; background-color: #d9534f; color: white; margin-top: 10px;">删除场景</button>
+  <button id="saveSceneButton" style="width: 100%; background-color: #34a853; color: white; margin-top: 10px;">保存</button>
+  <button id="cancelEditButton" style="width: 100%; background-color: #4285f4; color: white; margin-top: 10px;">取消</button>
+</div>
+  
   <div class="input-container">
     <div class="input-label">补充说明（可选）：</div>
     <textarea id="userTaskInput" placeholder="请输入您希望OWL执行的具体任务..." rows="3" style="resize: none; width: 100%;"></textarea>
