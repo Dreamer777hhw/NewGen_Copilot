@@ -89,6 +89,14 @@
   
   <button id="captureAndGenerate">截屏并生成指令</button>
   <div class="loading" id="loadingIndicator">处理中...</div>
+
+  <div class="input-container">
+    <div class="input-label">选择场景：</div>
+    <select id="sceneSelector" style="width: 100%; padding: 5px; margin-bottom: 10px;">
+      <option value="">默认</option>
+    </select>
+    <button id="manageScenesButton" style="width: 100%; background-color: #fbbc05; color: #333;">管理场景</button>
+  </div>
   
   <div class="input-container">
     <div class="input-label">补充说明（可选）：</div>
@@ -103,8 +111,8 @@
   <div id="actionContainer"></div>
   
   <button id="newTaskButton" style="display: none;">开始新任务</button>
-  <button id="clearData">清除数据</button>
-  <button id="exportData">导出数据</button>
+  <!-- <button id="clearData">清除数据</button> -->
+  <!-- <button id="exportData">导出数据</button> -->
 
   <script src="popup.js"></script>
 </body>

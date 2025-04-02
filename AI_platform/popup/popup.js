@@ -6,6 +6,61 @@ document.addEventListener('DOMContentLoaded', function() {
   const actionContainer = document.getElementById('actionContainer');
   const newTaskButton = document.getElementById('newTaskButton');
   const userTaskInput = document.getElementById('userTaskInput');
+
+  const sceneSelector = document.getElementById('sceneSelector');
+  const manageScenesButton = document.getElementById('manageScenesButton');
+
+  // 初始化场景列表
+  const defaultScenes = [
+    { name: '默认', prompt: '' },
+    { name: '编程问题', prompt: '请描述编程问题的具体要求...' },
+    { name: '学术论文', prompt: '请描述学术论文的标题或关键发现...' },
+    { name: '技术文档', prompt: '请描述技术文档的具体内容...' },
+    { name: '产品页面', prompt: '请描述产品的名称、型号和特点...' }
+  ];
+
+  // 从存储中加载场景
+  chrome.storage.local.get(['scenes'], function(result) {
+    const scenes = result.scenes || defaultScenes;
+    populateSceneSelector(scenes);
+  });
+
+  // 填充场景选择器
+  function populateSceneSelector(scenes) {
+    sceneSelector.innerHTML = '';
+    scenes.forEach(scene => {
+      const option = document.createElement('option');
+      option.value = scene.prompt;
+      option.textContent = scene.name;
+      sceneSelector.appendChild(option);
+    });
+  }
+
+  // 监听场景选择变化
+  sceneSelector.addEventListener('change', function() {
+    const selectedPrompt = sceneSelector.value;
+    userTaskInput.value = selectedPrompt; // 自动填充补充说明
+  });
+
+  // 管理场景按钮点击事件
+  manageScenesButton.addEventListener('click', function() {
+    const sceneName = prompt('请输入场景名称：');
+    if (!sceneName) return;
+
+    const scenePrompt = prompt('请输入该场景的Prompt：');
+    if (scenePrompt === null) return;
+
+    chrome.storage.local.get(['scenes'], function(result) {
+      const scenes = result.scenes || defaultScenes;
+      scenes.push({ name: sceneName, prompt: scenePrompt });
+
+      // 保存到存储
+      chrome.storage.local.set({ scenes }, function() {
+        populateSceneSelector(scenes);
+        alert('场景已添加！');
+      });
+    });
+  });
   
   // 从存储中恢复之前的状态
   restoreState();
