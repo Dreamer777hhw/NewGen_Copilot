@@ -36,8 +36,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // 新任务按钮
   newTaskButton.addEventListener('click', function() {
     // 清空当前结果
+    instructionResult.disabled = false;
+    instructionResult.value = '';
     instructionResult.style.display = 'none';
-    instructionResult.textContent = '';
     
     // 清空操作按钮容器
     actionContainer.innerHTML = '';
@@ -142,15 +143,15 @@ document.addEventListener('DOMContentLoaded', function() {
       // 提取生成的指令
       const instruction = data.choices[0].message.content;
       
-      // 显示生成的指令
-      instructionResult.textContent = instruction;
+      instructionResult.value = instruction;
       instructionResult.style.display = 'block';
+      instructionResult.disabled = false; // 确保文本框可编辑
       
       // 保存当前指令到存储
       chrome.storage.local.set({ currentInstruction: instruction });
       
       // 创建操作按钮
-      createActionButtons(instruction);
+      createActionButtons();
       
       // 显示新任务按钮
       newTaskButton.style.display = 'block';
@@ -179,14 +180,14 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('API请求设置错误:', error.message);
       }
       
-      instructionResult.textContent = errorMessage;
+      instructionResult.value = errorMessage;
       instructionResult.style.display = 'block';
       console.error('API调用详细错误:', error);
     });
   }
   
   // 创建操作按钮
-  function createActionButtons(instruction) {
+  function createActionButtons() {
     // 清空操作按钮容器
     actionContainer.innerHTML = '';
     
@@ -195,7 +196,12 @@ document.addEventListener('DOMContentLoaded', function() {
     sendToOwlButton.textContent = '发送到OWL处理';
     sendToOwlButton.className = 'action-button';
     sendToOwlButton.onclick = function() {
-      sendInstructionToOwl(instruction);
+      const editedInstruction = instructionResult.value.trim();
+      if (editedInstruction) {
+        sendInstructionToOwl(editedInstruction);
+      } else {
+        alert('请先生成或输入指令');
+      }
     };
     
     // 创建复制按钮
@@ -203,13 +209,19 @@ document.addEventListener('DOMContentLoaded', function() {
     copyButton.textContent = '复制指令';
     copyButton.className = 'action-button';
     copyButton.onclick = function() {
-      navigator.clipboard.writeText(instruction)
-        .then(() => {
-          alert('指令已复制到剪贴板');
-        })
-        .catch(err => {
-          console.error('复制失败:', err);
-        });
+      // 直接从文本框获取可能已编辑的指令
+      const editedInstruction = instructionResult.value.trim();
+      if (editedInstruction) {
+        navigator.clipboard.writeText(editedInstruction)
+          .then(() => {
+            alert('指令已复制到剪贴板');
+          })
+          .catch(err => {
+            console.error('复制失败:', err);
+          });
+      } else {
+        alert('没有可复制的指令');
+      }
     };
     
     // 将按钮添加到容器
@@ -228,9 +240,29 @@ document.addEventListener('DOMContentLoaded', function() {
       finalInstruction = `${instruction}。补充说明：${userTask}`;
     }
     
-    // 打开指令编辑器页面，而不是直接发送
-    const editorUrl = `http://localhost:7861/instruction_editor?instruction=${encodeURIComponent(finalInstruction)}`;
-    chrome.tabs.create({ url: editorUrl });
+    fetch('http://localhost:7861/api/process_instruction', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        instruction: finalInstruction
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      alert('指令已发送到OWL系统处理！');
+      
+      // 禁用截屏按钮，防止重复操作
+      captureButton.disabled = true;
+      
+      // 打开结果查看器页面
+      chrome.tabs.create({ url: 'http://localhost:7865' });
+    })
+    .catch(error => {
+      console.error('发送指令到OWL时出错:', error);
+      alert('发送指令到OWL时出错，请确保OWL系统正在运行。');
+    });
   }
   
   // 保存插件状态
@@ -245,12 +277,13 @@ document.addEventListener('DOMContentLoaded', function() {
       const instruction = result.currentInstruction;
       
       if (state && state.hasResult && instruction) {
-        // 恢复指令显示
-        instructionResult.textContent = instruction;
+        // 恢复指令显示（使用value而不是textContent）
+        instructionResult.value = instruction;
         instructionResult.style.display = 'block';
+        instructionResult.disabled = false; // 确保文本框可编辑
         
         // 创建操作按钮
-        createActionButtons(instruction);
+        createActionButtons();
         
         // 显示新任务按钮
         newTaskButton.style.display = 'block';

@@ -92,10 +92,13 @@
   
   <div class="input-container">
     <div class="input-label">补充说明（可选）：</div>
-    <textarea id="userTaskInput" placeholder="请输入您希望OWL执行的具体任务..." rows="3"></textarea>
+    <textarea id="userTaskInput" placeholder="请输入您希望OWL执行的具体任务..." rows="3" style="resize: none; width: 100%;"></textarea>
   </div>
   
-  <div id="instructionResult"></div>
+  <div class="input-container">
+    <div class="input-label">生成的指令（可编辑）：</div>
+    <textarea id="instructionResult" placeholder="指令将在这里显示..." rows="5" style="resize: none; width: 90%;"></textarea>
+  </div>
   
   <div id="actionContainer"></div>
   
