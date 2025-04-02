@@ -22,6 +22,7 @@ from result_viewer import start_result_viewer, update_result, current_result
 import json
 from datetime import datetime
 from clean_owl_results import extract_owl_response
+import webbrowser
 
 # 获取项目根目录
 base_dir = pathlib.Path(__file__).parent.parent
@@ -30,6 +31,146 @@ def start_api_server():
     """启动API服务器"""
     api_script = os.path.join(base_dir, "owl", "api_server.py")
     subprocess.Popen([sys.executable, api_script])
+
+def start_instruction_editor():
+    """启动指令编辑器界面"""
+    # 使用简单的HTML文件作为指令编辑器界面
+    editor_html = os.path.join(base_dir, "owl", "instruction_editor.html")
+    
+    # 如果编辑器HTML文件不存在，则创建一个
+    if not os.path.exists(editor_html):
+        create_instruction_editor_html(editor_html)
+    
+    # 打开浏览器显示编辑器界面
+    webbrowser.open('file://' + editor_html)
+
+def create_instruction_editor_html(file_path):
+    """创建指令编辑器HTML文件"""
+    html_content = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>指令编辑器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #3367d6;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>指令编辑器</h1>
+    <p>您可以在下方编辑由截图生成的指令，然后发送到OWL系统进行处理。</p>
+    
+    <textarea id="instructionText" placeholder="加载中..."></textarea>
+    
+    <div>
+        <button id="sendButton">发送到OWL处理</button>
+        <button id="cancelButton">取消</button>
+    </div>
+    
+    <div id="status"></div>
+    
+    <script>
+        // 从URL参数中获取指令
+        const urlParams = new URLSearchParams(window.location.search);
+        const instruction = urlParams.get('instruction');
+        
+        // 显示指令
+        document.getElementById('instructionText').value = instruction || '';
+        
+        // 发送按钮点击事件
+        document.getElementById('sendButton').addEventListener('click', function() {
+            const editedInstruction = document.getElementById('instructionText').value.trim();
+            
+            if (!editedInstruction) {
+                showStatus('请输入指令', 'error');
+                return;
+            }
+            
+            // 发送到API服务器
+            fetch('http://localhost:7861/api/process_instruction', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    instruction: editedInstruction
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                showStatus('指令已发送到OWL系统处理！', 'success');
+                
+                // 打开结果查看器页面
+                setTimeout(() => {
+                    window.location.href = 'http://localhost:7862';
+                }, 1000);
+            })
+            .catch(error => {
+                showStatus('发送指令到OWL时出错，请确保OWL系统正在运行。', 'error');
+                console.error('发送指令到OWL时出错:', error);
+            });
+        });
+        
+        // 取消按钮点击事件
+        document.getElementById('cancelButton').addEventListener('click', function() {
+            window.close();
+        });
+        
+        // 显示状态信息
+        function showStatus(message, type) {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = message;
+            statusElement.className = type;
+        }
+    </script>
+</body>
+</html>
+"""
+    
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
 
 def kill_process_on_port(port):
     """杀死占用指定端口的进程"""
@@ -136,6 +277,13 @@ def process_and_save_results(result, results_dir="owl_results"):
     
     return clean_result
 
+def start_result_viewer_server():
+    """启动结果查看器服务器"""
+    # 启动结果查看器
+    result_viewer_thread = threading.Thread(target=start_result_viewer, args=(7862,))
+    result_viewer_thread.daemon = True
+    result_viewer_thread.start()
+
 def main():
     """主函数，启动整个系统"""
     print("启动截图指令处理流程...")
@@ -151,6 +299,9 @@ def main():
     
     # 启动API服务器
     start_api_server()
+    
+    # 启动结果查看器服务器
+    start_result_viewer_server()
     
     # 等待API服务器完全启动
     time.sleep(1)

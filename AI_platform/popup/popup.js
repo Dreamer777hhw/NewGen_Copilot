@@ -228,29 +228,9 @@ document.addEventListener('DOMContentLoaded', function() {
       finalInstruction = `${instruction}。补充说明：${userTask}`;
     }
     
-    fetch('http://localhost:7861/api/process_instruction', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        instruction: finalInstruction
-      })
-    })
-    .then(response => response.json())
-    .then(data => {
-      alert('指令已发送到OWL系统处理！');
-      
-      // 禁用截屏按钮，防止重复操作
-      captureButton.disabled = true;
-      
-      // 打开结果查看器页面
-      chrome.tabs.create({ url: 'http://localhost:7865' });
-    })
-    .catch(error => {
-      console.error('发送指令到OWL时出错:', error);
-      alert('发送指令到OWL时出错，请确保OWL系统正在运行。');
-    });
+    // 打开指令编辑器页面，而不是直接发送
+    const editorUrl = `http://localhost:7861/instruction_editor?instruction=${encodeURIComponent(finalInstruction)}`;
+    chrome.tabs.create({ url: editorUrl });
   }
   
   // 保存插件状态
