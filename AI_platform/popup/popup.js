@@ -7,10 +7,10 @@ document.addEventListener('DOMContentLoaded', function() {
   const newTaskButton = document.getElementById('newTaskButton');
   const userTaskInput = document.getElementById('userTaskInput');
 
-  const sceneSelector = document.getElementById('sceneSelector');
-  const manageScenesButton = document.getElementById('manageScenesButton');
+  const sceneSelectorContainer = document.getElementById('sceneSelectorContainer');
+  const addSceneButton = document.getElementById('addSceneButton');
 
-  // 初始化场景列表
+  // 默认场景列表
   const defaultScenes = [
     { name: '默认', prompt: '' },
     { name: '编程问题', prompt: '请描述编程问题的具体要求...' },
@@ -27,23 +27,64 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 填充场景选择器
   function populateSceneSelector(scenes) {
-    sceneSelector.innerHTML = '';
-    scenes.forEach(scene => {
-      const option = document.createElement('option');
-      option.value = scene.prompt;
-      option.textContent = scene.name;
-      sceneSelector.appendChild(option);
+    sceneSelectorContainer.innerHTML = ''; // 清空现有内容
+
+    scenes.forEach((scene, index) => {
+      const sceneItem = document.createElement('div');
+      sceneItem.style.display = 'flex';
+      sceneItem.style.justifyContent = 'space-between';
+      sceneItem.style.alignItems = 'center';
+      sceneItem.style.padding = '5px 0';
+
+      // 场景名称
+      const sceneName = document.createElement('span');
+      sceneName.textContent = scene.name;
+      sceneName.style.cursor = 'pointer';
+      sceneName.style.flexGrow = '1';
+      sceneName.style.color = '#333';
+      sceneName.style.fontSize = '14px';
+      sceneName.addEventListener('click', () => {
+        userTaskInput.value = scene.prompt; // 填充补充说明
+      });
+
+      // 删除按钮
+      const deleteButton = document.createElement('button');
+      deleteButton.textContent = '×';
+      deleteButton.style.background = 'none';
+      deleteButton.style.border = 'none';
+      deleteButton.style.color = '#d9534f';
+      deleteButton.style.cursor = 'pointer';
+      deleteButton.style.fontSize = '16px';
+      deleteButton.style.marginLeft = '10px';
+      deleteButton.addEventListener('click', () => {
+        deleteScene(index);
+      });
+
+      sceneItem.appendChild(sceneName);
+      sceneItem.appendChild(deleteButton);
+      sceneSelectorContainer.appendChild(sceneItem);
+    });
+
+    // 保存场景到存储
+    chrome.storage.local.set({ scenes });
+  }
+
+  // 删除场景
+  function deleteScene(index) {
+    chrome.storage.local.get(['scenes'], function(result) {
+      const scenes = result.scenes || defaultScenes;
+      scenes.splice(index, 1); // 删除指定场景
+
+      // 更新存储并刷新场景选择器
+      chrome.storage.local.set({ scenes }, function() {
+        populateSceneSelector(scenes);
+        alert('场景已删除！');
+      });
     });
   }
 
-  // 监听场景选择变化
-  sceneSelector.addEventListener('change', function() {
-    const selectedPrompt = sceneSelector.value;
-    userTaskInput.value = selectedPrompt; // 自动填充补充说明
-  });
-
-  // 管理场景按钮点击事件
-  manageScenesButton.addEventListener('click', function() {
+  // 添加场景按钮点击事件
+  addSceneButton.addEventListener('click', function() {
     const sceneName = prompt('请输入场景名称：');
     if (!sceneName) return;
 
@@ -54,7 +95,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const scenes = result.scenes || defaultScenes;
       scenes.push({ name: sceneName, prompt: scenePrompt });
 
-      // 保存到存储
+      // 保存到存储并刷新场景选择器
       chrome.storage.local.set({ scenes }, function() {
         populateSceneSelector(scenes);
         alert('场景已添加！');
