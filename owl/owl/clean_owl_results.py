@@ -11,6 +11,10 @@ def extract_owl_response(owl_result):
     返回:
         str: 提取的有用回答
     """
+    # 处理可能的编码问题
+    if isinstance(owl_result, bytes):
+        owl_result = owl_result.decode('utf-8', errors='ignore')
+    
     # 首先检查是否已经是一个干净的回答（没有特定格式的原始输出）
     if not any(pattern in owl_result for pattern in ["'role': 'assistant'", "回答:", "指令:", "2025-", "Traceback"]):
         # 如果看起来已经是干净的文本，直接返回
