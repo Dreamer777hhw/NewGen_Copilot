@@ -173,27 +173,37 @@ document.addEventListener('DOMContentLoaded', function() {
   restoreState();
   
   // 清除数据按钮
-  document.getElementById('clearData').addEventListener('click', function() {
-    chrome.storage.local.set({ behaviorData: [] }, function() {
-      alert('数据已清除');
+  const clearDataButton = document.getElementById('clearData');
+  if (clearDataButton) {
+    clearDataButton.addEventListener('click', function() {
+      chrome.storage.local.set({ behaviorData: [] }, function() {
+        alert('数据已清除');
+      });
     });
-  });
+  } else {
+    console.warn('未找到clearData元素');
+  }
 
   // 导出数据按钮
-  document.getElementById('exportData').addEventListener('click', function() {
-    chrome.storage.local.get(['behaviorData'], function(result) {
-      const data = result.behaviorData || [];
-      const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-      const url = URL.createObjectURL(blob);
-      
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = '行为数据_' + new Date().toISOString().slice(0,10) + '.json';
-      a.click();
-      
-      URL.revokeObjectURL(url);
+  const exportDataButton = document.getElementById('exportData');
+  if (exportDataButton) {
+    exportDataButton.addEventListener('click', function() {
+      chrome.storage.local.get(['behaviorData'], function(result) {
+        const data = result.behaviorData || [];
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '行为数据_' + new Date().toISOString().slice(0,10) + '.json';
+        a.click();
+        
+        URL.revokeObjectURL(url);
+      });
     });
-  });
+  } else {
+    console.warn('未找到exportData元素');
+  }
 
   // 新任务按钮
   newTaskButton.addEventListener('click', function() {
@@ -260,7 +270,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 使用阿里云DashScope API (OpenAI兼容模式)
     const apiUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-    const apiKey = 'sk-3f855bc5d6b34f2fba9a2491cff46b61'; // 您的API密钥
+    const apiKey = 'sk-a2de154e32544728addcbb65823b73b3'; // 您的API密钥
     
     // 修正请求格式
     const requestData = {
@@ -399,16 +409,58 @@ document.addEventListener('DOMContentLoaded', function() {
     // 组合最终指令
     let finalInstruction = instruction;
     if (userTask) {
-      finalInstruction = `${instruction}。补充说明：${userTask}`;
+      finalInstruction = `${instruction}补充说明：${userTask}`;
     }
     
+    // 获取当前选择的场景
+    const selectedSceneIndex = sceneSelector.value;
+    const selectedScene = scenes[selectedSceneIndex];
+    const sceneName = selectedScene ? selectedScene.name : '默认';
+    
+    // 首先获取当前标签页的URL
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+      const currentUrl = tabs[0].url;
+      
+      // 如果是学术论文场景，先保存URL
+      if (selectedScene && selectedScene.name === '学术论文') {
+        // 先保存URL
+        fetch('http://localhost:7861/api/save_url', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            url: currentUrl
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('URL已保存:', data);
+          // URL保存成功后，发送指令
+          sendInstructionToOwlAPI(finalInstruction, sceneName);
+        })
+        .catch(error => {
+          console.error('保存URL时出错:', error);
+          // 即使URL保存失败，也尝试发送指令
+          sendInstructionToOwlAPI(finalInstruction, sceneName);
+        });
+      } else {
+        // 不是学术论文场景，直接发送指令
+        sendInstructionToOwlAPI(finalInstruction, sceneName);
+      }
+    });
+  }
+
+  // 实际发送指令到OWL API的函数
+  function sendInstructionToOwlAPI(instruction, sceneName) {
     fetch('http://localhost:7861/api/process_instruction', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        instruction: finalInstruction
+        instruction: instruction,
+        scene: sceneName
       })
     })
     .then(response => response.json())
@@ -439,10 +491,9 @@ document.addEventListener('DOMContentLoaded', function() {
       const instruction = result.currentInstruction;
       
       if (state && state.hasResult && instruction) {
-        // 恢复指令显示（使用value而不是textContent）
         instructionResult.value = instruction;
         instructionResult.style.display = 'block';
-        instructionResult.disabled = false; // 确保文本框可编辑
+        instructionResult.disabled = false;
         
         // 创建操作按钮
         createActionButtons();
