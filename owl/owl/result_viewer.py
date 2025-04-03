@@ -11,6 +11,7 @@ from datetime import datetime
 from clean_owl_results import extract_owl_response
 import shutil
 import base64
+import re
 
 # 创建一个全局队列用于存储最新结果
 result_queue = queue.Queue()
@@ -63,6 +64,8 @@ HTML_TEMPLATE = """
 <head>
     <title>OWL结果查看器</title>
     <meta charset="utf-8">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
     <style>
         body {{
             font-family: Arial, sans-serif;
@@ -183,6 +186,16 @@ HTML_TEMPLATE = """
     <script>
         document.addEventListener('DOMContentLoaded', function() {{
             const resultArea = document.getElementById('result-area');
+
+            const parseMarkdownElements = () => {{
+                document.querySelectorAll('.content').forEach(element => {{
+                    const raw = element.textContent;
+                    const clean = DOMPurify.sanitize(raw);
+                    element.innerHTML = marked.parse(clean);
+                }});
+            }};
+
+            parseMarkdownElements();
             
             // 建立WebSocket连接
             const ws = new WebSocket('ws://localhost:{ws_port}');
@@ -192,8 +205,15 @@ HTML_TEMPLATE = """
             }};
             
             ws.onmessage = function(event) {{
-                // 更新结果区域
+                
                 resultArea.innerHTML = event.data;
+    
+                // 仅对.content元素进行Markdown解析
+                resultArea.querySelectorAll('.content').forEach(contentDiv => {{
+                    const raw = contentDiv.textContent; // 获取原始文本内容
+                    const clean = DOMPurify.sanitize(raw);
+                    contentDiv.innerHTML = marked.parse(clean);
+                }});
                 // 如果消息包含"历史记录已清除"，则刷新页面以更新历史记录显示
                 if(event.data.includes("历史记录已清除")) {{
                     setTimeout(function() {{
@@ -225,6 +245,13 @@ HTML_TEMPLATE = """
                     ws.send('clear_history');
                 }}
             }});
+
+            // 修改历史记录刷新后的解析
+            const observer = new MutationObserver(parseMarkdownElements);
+            observer.observe(document.querySelector('.history-container'), {{
+                childList: true,
+                subtree: true
+            }});
         }});
     </script>
 </head>
@@ -237,6 +264,7 @@ HTML_TEMPLATE = """
     </div>
     
     <div class="result-container">
+
         <div id="result-area">{result}</div>
     </div>
     
@@ -383,8 +411,9 @@ def update_result(data, instruction):
             extracted_tables = data["extracted_tables"]
             article_url = data.get("article_url", "")
             
-            # 使用extract_owl_response清理结果
-            clean_content = extract_owl_response(content)
+            clean_content = re.sub(r'(?<!\n)\n(?!\n)', ' ', content)  # 单换行转空格
+            clean_content = re.sub(r'\n{2,}', '\n', clean_content)  # 合并连续2+换行为1个
+            clean_content = clean_content.strip()  # 去除首尾空白
             
             # 保存HTML报告
             report_path = ""
@@ -465,8 +494,9 @@ def update_result(data, instruction):
                 # 将字典转换为字符串
                 content = json.dumps(data, ensure_ascii=False)
             
-            # 使用extract_owl_response清理结果
-            clean_content = extract_owl_response(content)
+            clean_content = re.sub(r'(?<!\n)\n(?!\n)', ' ', content)  # 单换行转空格
+            clean_content = re.sub(r'\n{2,}', '\n', clean_content)  # 合并连续2+换行为1个
+            clean_content = clean_content.strip()  # 去除首尾空白
             
             # 创建一个包含指令和内容的结构化显示框架
             current_result = f"""
@@ -490,11 +520,12 @@ def update_result(data, instruction):
             })
     else:
         content = str(data)
+
+        clean_content = re.sub(r'(?<!\n)\n(?!\n)', ' ', content)  # 单换行转空格
+        clean_content = re.sub(r'\n{2,}', '\n', clean_content)  # 合并连续2+换行为1个
+        clean_content = clean_content.strip()  # 去除首尾空白
         
-        # 使用extract_owl_response清理结果
-        clean_content = extract_owl_response(content)
-        
-        # 创建一个包含指令和内容的结构化显示框架
+        # 创建一个包含指令和内容的结构化显示框架``
         current_result = f"""
         <div class="result-box">
             <div class="instruction-section">
