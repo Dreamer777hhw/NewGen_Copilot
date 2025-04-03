@@ -9,6 +9,8 @@ import json
 import asyncio
 from datetime import datetime
 from clean_owl_results import extract_owl_response
+import shutil
+import base64
 
 # 创建一个全局队列用于存储最新结果
 result_queue = queue.Queue()
@@ -19,7 +21,10 @@ results_history = []
 # 结果历史文件路径 - 使用pathlib获取相对路径
 base_dir = Path(__file__).parent
 HISTORY_FILE = str(base_dir / "owl_results_history.json")
-# print(HISTORY_FILE,"result_viewer.py")
+# HTML报告目录
+REPORTS_DIR = str(base_dir / "reports")
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
 # 加载历史记录
 def load_history():
     """加载历史记录"""
@@ -27,7 +32,11 @@ def load_history():
     try:
         if os.path.exists(HISTORY_FILE):
             with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                results_history = json.load(f)
+                file_content = f.read().strip()
+                if file_content:  # 检查文件是否为空
+                    results_history = json.loads(file_content)
+                else:
+                    results_history = []  # 如果文件为空，初始化为空列表
                 
             # 确保历史记录按时间戳倒序排列
             results_history = sorted(results_history, 
@@ -103,21 +112,13 @@ HTML_TEMPLATE = """
             font-size: 0.9em;
             margin-bottom: 10px;
         }}
-        .tab-buttons {{
-            margin-bottom: 10px;
-        }}
-        .tab-button {{
-            background-color: #f1f1f1;
-            color: #333;
-            padding: 8px 12px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-right: 5px;
-        }}
-        .tab-button.active {{
-            background-color: #4CAF50;
-            color: white;
+        .instruction {{
+            background-color: #e6f7ff;
+            padding: 10px;
+            border-left: 4px solid #1890ff;
+            margin-bottom: 15px;
+            font-style: italic;
+            display: block;
         }}
         .content {{
             background-color: #f9f9f9;
@@ -125,8 +126,58 @@ HTML_TEMPLATE = """
             border-radius: 4px;
             white-space: pre-wrap;
         }}
-        .hidden {{
-            display: none;
+        .result-box {{
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }}
+        .instruction-section {{
+            background-color: #e6f7ff;
+            padding: 12px 15px;
+            border-bottom: 1px solid #ddd;
+        }}
+        .answer-section {{
+            padding: 15px;
+        }}
+        .answer-section .content {{
+            margin-top: 10px;
+        }}
+        .image-section {{
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }}
+        .image-container {{
+            margin-bottom: 15px;
+        }}
+        .image-container img {{
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }}
+        .image-description {{
+            font-style: italic;
+            color: #666;
+            margin-top: 5px;
+        }}
+        .table-section {{
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+            overflow-x: auto;
+        }}
+        .report-link {{
+            display: inline-block;
+            margin-top: 10px;
+            background-color: #1890ff;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            text-decoration: none;
+        }}
+        .report-link:hover {{
+            background-color: #0c7cd5;
         }}
     </style>
     <script>
@@ -143,6 +194,12 @@ HTML_TEMPLATE = """
             ws.onmessage = function(event) {{
                 // 更新结果区域
                 resultArea.innerHTML = event.data;
+                // 如果消息包含"历史记录已清除"，则刷新页面以更新历史记录显示
+                if(event.data.includes("历史记录已清除")) {{
+                    setTimeout(function() {{
+                        window.location.reload();
+                    }}, 1000);
+                }}
             }};
             
             ws.onerror = function(error) {{
@@ -161,28 +218,11 @@ HTML_TEMPLATE = """
                 resultArea.innerHTML = "准备好接收新任务...";
             }});
             
-            // 添加切换原始/清理结果的功能
-            const historyItems = document.querySelectorAll('.history-item');
-            historyItems.forEach(item => {{
-                const cleanButton = item.querySelector('.clean-tab');
-                const rawButton = item.querySelector('.raw-tab');
-                const cleanContent = item.querySelector('.clean-content');
-                const rawContent = item.querySelector('.raw-content');
-                
-                if (cleanButton && rawButton) {{
-                    cleanButton.addEventListener('click', function() {{
-                        cleanButton.classList.add('active');
-                        rawButton.classList.remove('active');
-                        cleanContent.classList.remove('hidden');
-                        rawContent.classList.add('hidden');
-                    }});
-                    
-                    rawButton.addEventListener('click', function() {{
-                        rawButton.classList.add('active');
-                        cleanButton.classList.remove('active');
-                        rawContent.classList.remove('hidden');
-                        cleanContent.classList.add('hidden');
-                    }});
+            // 清除历史记录按钮点击事件
+            document.getElementById('clear-history-button').addEventListener('click', function() {{
+                if(confirm('确定要清除所有历史记录吗？此操作不可撤销。')) {{
+                    // 发送清除历史记录消息给服务器
+                    ws.send('clear_history');
                 }}
             }});
         }});
@@ -193,6 +233,7 @@ HTML_TEMPLATE = """
     
     <div class="button-container">
         <button id="new-task-button">开始新任务</button>
+        <button id="clear-history-button" style="background-color: #f44336;">清除历史记录</button>
     </div>
     
     <div class="result-container">
@@ -210,7 +251,40 @@ HTML_TEMPLATE = """
 # 自定义HTTP请求处理器
 class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        if self.path == '/':
+        # 处理图像请求
+        if self.path.startswith('/images/'):
+            try:
+                image_path = self.path[8:]  # 移除 '/images/' 前缀
+                self.send_response(200)
+                if image_path.endswith('.png'):
+                    self.send_header('Content-type', 'image/png')
+                elif image_path.endswith('.jpg') or image_path.endswith('.jpeg'):
+                    self.send_header('Content-type', 'image/jpeg')
+                else:
+                    self.send_header('Content-type', 'application/octet-stream')
+                self.end_headers()
+                with open(image_path, 'rb') as f:
+                    self.wfile.write(f.read())
+                return
+            except Exception as e:
+                print(f"提供图像时出错: {str(e)}")
+                self.send_error(404, "File not found")
+                return
+        # 处理报告请求
+        elif self.path.startswith('/reports/'):
+            try:
+                report_path = self.path[1:]  # 移除开头的 '/'
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                with open(report_path, 'rb') as f:
+                    self.wfile.write(f.read())
+                return
+            except Exception as e:
+                print(f"提供报告时出错: {str(e)}")
+                self.send_error(404, "File not found")
+                return
+        elif self.path == '/':
             # 返回HTML页面
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
@@ -229,19 +303,64 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
             
             for item in sorted_history:
                 timestamp = item.get('timestamp', '')
-                clean_result = item.get('result', '')
-                raw_result = item.get('raw_result', clean_result)  # 如果没有原始结果，使用清理后的结果
+                result = item.get('result', '')
+                instruction = item.get('instruction', '')  # 获取指令
+                images = item.get('images', [])  # 获取图像列表
+                tables = item.get('tables', [])  # 获取表格列表
+                report_path = item.get('report_path', '')  # 获取HTML报告路径
+                
+                # 添加指令显示区域
+                instruction_html = ""
+                if instruction and instruction.strip():  # 确保指令不为空
+                    # 对指令进行HTML转义，防止XSS攻击
+                    instruction = instruction.replace('<', '&lt;').replace('>', '&gt;')
+                    instruction_html = f'<div class="instruction"><strong>指令:</strong> {instruction}</div>'
+                
+                # 添加图像显示区域
+                images_html = ""
+                if images:
+                    images_html = '<div class="image-section"><h3>提取的图像</h3>'
+                    for i, img in enumerate(images):
+                        img_path = img.get('path', '')
+                        img_desc = img.get('description', '图像描述')
+                        if img_path:
+                            images_html += f'''
+                            <div class="image-container">
+                                <img src="/images/{img_path}" alt="图像 {i+1}">
+                                <p class="image-description">{img_desc}</p>
+                            </div>
+                            '''
+                    images_html += '</div>'
+                
+                # 添加表格显示区域
+                tables_html = ""
+                if tables:
+                    tables_html = '<div class="table-section"><h3>提取的表格</h3>'
+                    for i, table in enumerate(tables):
+                        table_data = table.get('data', '')
+                        table_desc = table.get('description', '表格描述')
+                        tables_html += f'''
+                        <div class="table-container">
+                            <p class="table-description">{table_desc}</p>
+                            {table_data}
+                        </div>
+                        '''
+                    tables_html += '</div>'
+                
+                # 添加报告链接
+                report_html = ""
+                if report_path:
+                    report_html = f'<a href="/{report_path}" target="_blank" class="report-link">查看完整分析报告</a>'
                 
                 history_html += f"""
                 <div class="history-item">
                     <h3>任务结果</h3>
                     <div class="timestamp">{timestamp}</div>
-                    <div class="tab-buttons">
-                        <button class="tab-button clean-tab active">清理后结果</button>
-                        <button class="tab-button raw-tab">原始结果</button>
-                    </div>
-                    <div class="content clean-content">{clean_result}</div>
-                    <div class="content raw-content hidden">{raw_result}</div>
+                    {instruction_html}
+                    <div class="content">{result}</div>
+                    {images_html}
+                    {tables_html}
+                    {report_html}
                 </div>
                 """
             
@@ -251,48 +370,164 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
 # 添加一个函数用于更新结果
-def update_result(data):
+def update_result(data, instruction):
     """更新当前结果并广播给所有连接的客户端"""
     global current_result, results_history
     
-    # 确保数据是字符串格式
+    # 处理数据
     if isinstance(data, dict):
-        if "content" in data:
-            content = data["content"]
+        # 检查是否是从run_scholar.py返回的结构化数据
+        if "answer" in data and "extracted_images" in data:
+            content = data["answer"]
+            extracted_images = data["extracted_images"]
+            extracted_tables = data["extracted_tables"]
+            article_url = data.get("article_url", "")
+            
+            # 使用extract_owl_response清理结果
+            clean_content = extract_owl_response(content)
+            
+            # 保存HTML报告
+            report_path = ""
+            if "OWL_HTML_REPORT" in data:
+                original_report = data["OWL_HTML_REPORT"]
+                if os.path.exists(original_report):
+                    # 创建一个唯一的报告文件名
+                    timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
+                    report_filename = f"report_{timestamp_str}.html"
+                    report_path = os.path.join(REPORTS_DIR, report_filename)
+                    
+                    # 复制报告文件
+                    shutil.copy2(original_report, report_path)
+                    report_path = report_path.replace("\\", "/")  # 确保路径格式正确
+            
+            # 创建一个包含指令和内容的结构化显示框架
+            current_result = f"""
+            <div class="result-box">
+                <div class="instruction-section">
+                    <strong>指令:</strong> {instruction if instruction else "无指令"}
+                </div>
+                <div class="answer-section">
+                    <strong>解答:</strong>
+                    <div class="content">{clean_content}</div>
+                </div>
+            """
+            
+            # 添加图像部分
+            if extracted_images:
+                current_result += '<div class="image-section"><h3>提取的图像</h3>'
+                for i, img in enumerate(extracted_images):
+                    img_path = img.get('path', '')
+                    img_desc = img.get('description', '图像描述')
+                    if img_path and os.path.exists(img_path):
+                        current_result += f'''
+                        <div class="image-container">
+                            <img src="/images/{img_path}" alt="图像 {i+1}">
+                            <p class="image-description">{img_desc}</p>
+                        </div>
+                        '''
+                current_result += '</div>'
+            
+            # 添加表格部分
+            if extracted_tables:
+                current_result += '<div class="table-section"><h3>提取的表格</h3>'
+                for i, table in enumerate(extracted_tables):
+                    table_data = table.get('data', '')
+                    table_desc = table.get('description', '表格描述')
+                    current_result += f'''
+                    <div class="table-container">
+                        <p class="table-description">{table_desc}</p>
+                        {table_data}
+                    </div>
+                    '''
+                current_result += '</div>'
+            
+            # 添加报告链接
+            if report_path:
+                current_result += f'<a href="/{report_path}" target="_blank" class="report-link">查看完整分析报告</a>'
+            
+            current_result += "</div>"
+            
+            # 添加到历史记录
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            results_history.insert(0, {
+                "timestamp": timestamp, 
+                "result": clean_content,
+                "instruction": instruction,
+                "images": extracted_images,
+                "tables": extracted_tables,
+                "report_path": report_path,
+                "article_url": article_url
+            })
         else:
-            # 将字典转换为字符串
-            content = json.dumps(data, ensure_ascii=False)
+            if "content" in data:
+                content = data["content"]
+            else:
+                # 将字典转换为字符串
+                content = json.dumps(data, ensure_ascii=False)
+            
+            # 使用extract_owl_response清理结果
+            clean_content = extract_owl_response(content)
+            
+            # 创建一个包含指令和内容的结构化显示框架
+            current_result = f"""
+            <div class="result-box">
+                <div class="instruction-section">
+                    <strong>指令:</strong> {instruction if instruction else "无指令"}
+                </div>
+                <div class="answer-section">
+                    <strong>解答:</strong>
+                    <div class="content">{clean_content}</div>
+                </div>
+            </div>
+            """
+            
+            # 添加到历史记录
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            results_history.insert(0, {
+                "timestamp": timestamp, 
+                "result": clean_content,
+                "instruction": instruction
+            })
     else:
         content = str(data)
-    
-    # 使用extract_owl_response清理结果
-    clean_content = extract_owl_response(content)
-    
-    # 更新当前结果为清理后的内容
-    current_result = clean_content
-    
-    # 添加到历史记录的开头，同时保存原始内容和清理后的内容
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    results_history.insert(0, {
-        "timestamp": timestamp, 
-        "result": clean_content,
-        "raw_result": content  # 保存原始结果
-    })
+        
+        # 使用extract_owl_response清理结果
+        clean_content = extract_owl_response(content)
+        
+        # 创建一个包含指令和内容的结构化显示框架
+        current_result = f"""
+        <div class="result-box">
+            <div class="instruction-section">
+                <strong>指令:</strong> {instruction if instruction else "无指令"}
+            </div>
+            <div class="answer-section">
+                <strong>解答:</strong>
+                <div class="content">{clean_content}</div>
+            </div>
+        </div>
+        """
+        
+        # 添加到历史记录
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        results_history.insert(0, {
+            "timestamp": timestamp, 
+            "result": clean_content,
+            "instruction": instruction
+        })
     
     # 保存历史记录
     save_history()
     
-    # 将清理后的结果放入队列，供WebSocket发送
-    result_queue.put(clean_content)
+    # 将更新后的结果放入队列，供WebSocket发送
+    result_queue.put(current_result)
 
 def start_result_viewer():
     """启动结果查看器服务器"""
-    # 加载历史记录
     load_history()
     
     # 使用不同的端口
-    http_port = 7865  # 原来是7862
-    ws_port = 7866    # 原来是7863
+    http_port = 7865
+    ws_port = 7866
     
     # 启动HTTP服务器
     handler = ResultViewerHandler
@@ -307,7 +542,7 @@ def start_result_viewer():
     # 启动HTTP服务器
     httpd.serve_forever()
 
-def start_websocket_server(port=7866):  # 原来是7863
+def start_websocket_server(port=7866):
     """启动WebSocket服务器"""
     import asyncio
     import websockets
@@ -328,6 +563,14 @@ def start_websocket_server(port=7866):  # 原来是7863
                 if message == 'clear':
                     current_result = "准备好接收新任务..."
                     # 通知所有客户端
+                    if active_connections:
+                        websockets_tasks = [
+                            conn.send(current_result) for conn in active_connections
+                        ]
+                        await asyncio.gather(*websockets_tasks)
+                elif message == 'clear_history':
+                    clear_history()
+                    current_result = "历史记录已清除，准备好接收新任务..."
                     if active_connections:
                         websockets_tasks = [
                             conn.send(current_result) for conn in active_connections
@@ -366,3 +609,11 @@ def start_websocket_server(port=7866):  # 原来是7863
     
     # 运行WebSocket服务器
     asyncio.run(main())
+
+# 添加一个清除历史记录的函数
+def clear_history():
+    """清除历史记录"""
+    global results_history
+    results_history = []
+    save_history()
+    print("历史记录已清除")

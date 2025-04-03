@@ -9,7 +9,7 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.
+# limitations under the License.def do_POST(self):
 # ========= Copyright 2023-2024 @ CAMEL-AI.org. All Rights Reserved. =========
 
 import os
@@ -24,6 +24,7 @@ import queue
 import time
 import socket
 from clean_owl_results import extract_owl_response
+from result_viewer import update_result, start_result_viewer
 
 # 获取项目根目录
 base_dir = pathlib.Path(__file__).parent.parent
@@ -58,15 +59,22 @@ class OWLRequestHandler(http.server.BaseHTTPRequestHandler):
                 # 解析JSON数据
                 data = json.loads(post_data.decode('utf-8'))
                 instruction = data.get('instruction')
+                scene = data.get('scene')
                 
                 if not instruction:
                     self._send_error_response('未提供指令')
                     return
 
                 # 重置处理状态
+                global processing_status
                 processing_status = {"status": "processing", "result": None}
+                
+                # 设置环境变量
+                env = os.environ.copy()
+                env['PYTHONIOENCODING'] = 'utf-8'
+                
                 # 在后台线程中运行OWL处理脚本
-                thread = threading.Thread(target=run_owl_script, args=(instruction,))
+                thread = threading.Thread(target=run_owl_script, args=(instruction, scene))
                 thread.daemon = True
                 thread.start()
                 
@@ -74,7 +82,31 @@ class OWLRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._send_success_response('指令已接收，正在处理中')
             
             except Exception as e:
-                self._send_error_response(str(e))
+                self._send_error_response(f'处理指令时出错: {str(e)}')
+        elif self.path == '/api/save_url':
+            # 新增API端点，用于保存当前URL
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                # 解析JSON数据
+                data = json.loads(post_data.decode('utf-8'))
+                url = data.get('url')
+                
+                if not url:
+                    self._send_error_response('未提供URL')
+                    return
+                
+                # 保存URL到JSON文件
+                url_file_path = base_dir / "owl" / "current_url.json"
+                with open(url_file_path, 'w', encoding='utf-8') as f:
+                    json.dump({"url": url, "timestamp": time.time()}, f)
+                
+                # 发送成功响应
+                self._send_success_response(f'URL已保存: {url}')
+            
+            except Exception as e:
+                self._send_error_response(f'保存URL时出错: {str(e)}')
         elif self.path == '/api/get_result':
             try:
                 # 直接从内存中获取结果
@@ -97,7 +129,7 @@ class OWLRequestHandler(http.server.BaseHTTPRequestHandler):
             # 清除当前指令和结果
             try:
                 # 清空指令文件
-                with open(instruction_file, 'w') as f:
+                with open(instruction_file, 'w', encoding='utf-8') as f:
                     f.write('')
                 
                 # 重置处理状态
@@ -111,7 +143,7 @@ class OWLRequestHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 
                 response = {"success": True, "message": "指令已清除"}
-                self.wfile.write(json.dumps(response).encode())
+                self.wfile.write(json.dumps(response).encode('utf-8'))
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')
@@ -119,7 +151,7 @@ class OWLRequestHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 
                 response = {"success": False, "error": str(e)}
-                self.wfile.write(json.dumps(response).encode())
+                self.wfile.write(json.dumps(response).encode('utf-8'))
         else:
             self._send_error_response('未知的API端点')
     
@@ -174,39 +206,62 @@ class OWLRequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(response.encode('utf-8'))
 
-def read_stream(stream, output_list, prefix):
-    """安全地读取流数据，处理可能的编码问题"""
-    while True:
+def read_stream(stream, output_list, prefix=""):
+    """
+    读取流并将输出添加到列表中。
+    
+    参数:
+        stream: 要读取的流。
+        output_list: 存储输出的列表。
+        prefix: 输出前缀。
+    """
+    for line in iter(stream.readline, ''):
         try:
-            line = stream.readline()
-            if not line:
-                break
-            line = line.rstrip()
-            if line:
-                # 尝试处理可能的编码问题
-                try:
-                    print(f"{prefix}: {line}")
-                except UnicodeEncodeError:
-                    print(f"{prefix}: [包含无法显示的字符]")
-                output_list.append(line + "\n")
-        except UnicodeDecodeError:
-            # 处理解码错误
+            print(f"{prefix}: {line.strip()}")
+            output_list.append(line)
+        except UnicodeEncodeError:
             print(f"{prefix}: [遇到解码错误]")
-            continue
+            # 尝试使用不同的编码处理
+            try:
+                safe_line = line.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+                output_list.append(safe_line)
+            except:
+                # 如果仍然失败，添加一个占位符
+                output_list.append("[内容包含无法显示的字符]")
 
-def run_owl_script(instruction):
+def run_owl_script(instruction, scene):
     """
     运行OWL处理脚本来处理指令。
     
     参数:
         instruction (str): 要处理的指令。
+        scene (str): 场景名称。
     """
     # 在函数开始处声明全局变量
     global processing_status
     
     try:
-        # 修正脚本路径，确保指向owl/owl/examples目录
-        script_path = os.path.join(base_dir, "owl", "examples", "run_screenshot_instruction.py")
+        # 根据场景选择不同的脚本
+        if scene == "编程问题":
+            script_name = "run_programming.py"
+        elif scene == "学术论文":
+            script_name = "run_scholar.py"
+        elif scene == "技术文档":
+            script_name = "run_technical_doc.py"
+        elif scene == "产品页面":
+            script_name = "run_product.py"
+        else:
+            # 如果没有匹配的场景，使用默认脚本
+            script_name = "run_default.py"
+        
+        # 构建脚本路径
+        script_path = os.path.join(base_dir, "owl", "examples", script_name)
+        
+        # 如果指定的脚本不存在，回退到默认脚本
+        if not os.path.exists(script_path):
+            print(f"警告: 脚本 {script_name} 不存在，使用默认脚本")
+            script_path = os.path.join(base_dir, "owl", "examples", "run_default.py")
+        
         print(f"执行脚本: {script_path}")
         print(f"当前工作目录: {os.getcwd()}")
         print(f"基础目录: {base_dir}")
@@ -218,6 +273,10 @@ def run_owl_script(instruction):
             processing_status = {"status": "error", "result": error_msg}
             return
         
+        # 设置环境变量
+        env = os.environ.copy()
+        env['PYTHONIOENCODING'] = 'utf-8'
+        
         # 运行脚本并实时捕获输出
         process = subprocess.Popen(
             [sys.executable, script_path, instruction],
@@ -226,7 +285,9 @@ def run_owl_script(instruction):
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            universal_newlines=True
+            universal_newlines=True,
+            encoding='utf-8',
+            env=env
         )
         
         # 实时读取输出
@@ -264,8 +325,7 @@ def run_owl_script(instruction):
             
             # 更新错误信息到结果查看器
             try:
-                from result_viewer import update_result
-                update_result({"content": error_msg})
+                update_result(error_msg, instruction)
             except Exception as e:
                 print(f"更新结果查看器时出错: {str(e)}")
             
@@ -274,92 +334,176 @@ def run_owl_script(instruction):
         # 从输出中提取JSON结果或结果文件
         result_data = None
         result_file = None
+        html_report = None
         
         for line in stdout.splitlines():
             if line.startswith("OWL_RESULT_JSON:"):
                 json_str = line.replace("OWL_RESULT_JSON:", "", 1)
                 try:
                     result_data = json.loads(json_str)
+                    print(f"解析JSON结果成功: {result_data}")
                     break
                 except json.JSONDecodeError:
                     print(f"解析JSON结果失败: {json_str}")
             elif line.startswith("OWL_RESULT_FILE:"):
                 result_file = line.replace("OWL_RESULT_FILE:", "", 1).strip()
+                print(f"发现结果文件: {result_file}")
                 if os.path.exists(result_file):
                     try:
                         with open(result_file, 'r', encoding='utf-8') as f:
                             result_data = json.load(f)
+                        print(f"从文件读取JSON结果成功")
                         break
                     except Exception as e:
                         print(f"从文件读取JSON结果失败: {str(e)}")
+            elif line.startswith("OWL_HTML_REPORT:"):
+                html_report = line.replace("OWL_HTML_REPORT:", "", 1).strip()
+                print(f"发现HTML报告: {html_report}")
         
-        # 构建最终结果，确保处理可能的编码问题
         try:
-            # 清理结果中可能导致编码问题的字符
             def clean_text(text):
                 if isinstance(text, str):
-                    # 替换或移除可能导致问题的特殊字符
                     return text.encode('utf-8', errors='ignore').decode('utf-8')
                 return text
             
-            # 构建和清理结果
+            # 处理结果数据
             if result_data:
-                instruction = clean_text(result_data.get("instruction", ""))
-                answer = clean_text(result_data.get("answer", ""))
-                result = f"指令: {instruction}\n\n回答: {answer}"
+                # 如果是结构化数据
+                if isinstance(result_data, dict):
+                    # 提取回答
+                    answer = clean_text(result_data.get("answer", ""))
+                    
+                    # 提取聊天历史中的solution
+                    chat_history = result_data.get("chat_history", [])
+                    solutions = []
+                    
+                    for message in chat_history:
+                        if message.get("assistant"):
+                            solutions.append(message.get("assistant"))
+                            # 移除"Next request."等结束语
+                            if "Next request." in solutions[-1]:
+                                solutions[-1] = solutions[-1].split("Next request.", 1)[0]
+
+                    # 合并所有solution
+                    combined_solution = "\n\n".join(solutions)
+                    
+                    # 如果answer为空或不完整，使用combined_solution
+                    if not answer or len(answer) < len(combined_solution):
+                        answer = combined_solution
+                    
+                    # 提取图像和表格
+                    extracted_images = result_data.get("extracted_images", [])
+                    extracted_tables = result_data.get("extracted_tables", [])
+                    article_url = result_data.get("article_url", "")
+                    all_rounds = result_data.get("all_rounds", [])
+                    
+                    # 创建结构化结果
+                    structured_result = {
+                        "instruction": instruction,
+                        "answer": answer,
+                        "extracted_images": extracted_images,
+                        "extracted_tables": extracted_tables,
+                        "article_url": article_url,
+                        "all_rounds": all_rounds,
+                        "html_report": html_report,
+                        "chat_history": chat_history
+                    }
+                    
+                    # 更新结果查看器
+                    update_result(structured_result, instruction)
+                    
+                    # 更新处理状态
+                    processing_status = {
+                        "status": "completed", 
+                        "result": answer,
+                        "structured_result": structured_result
+                    }
+                else:
+                    # 如果是简单数据
+                    result = f"指令: {instruction}\n\n回答: {clean_text(result_data)}"
+                    clean_result = extract_owl_response(result)
+                    
+                    processing_status = {"status": "completed", "result": clean_result, "raw_result": result}
+                    update_result(clean_result, instruction)
             else:
+                # 如果没有结构化数据，从stdout中提取
                 result = clean_text(f"指令: {instruction}\n\n回答: ")
                 
                 # 从输出中提取回答部分
                 if stdout:
-                    # 查找包含"Answer:"的行
                     answer_found = False
                     answer_content = []
                     
                     for line in stdout.splitlines():
-                        # 检查是否包含Answer:标记
                         if "Answer:" in line and not answer_found:
                             answer_found = True
-                            # 提取Answer:后面的内容
                             answer_part = line.split("Answer:", 1)[1].strip()
-                            if answer_part:  # 如果在同一行有内容
+                            if answer_part:
                                 answer_content.append(answer_part)
-                        # 如果已找到Answer标记，继续收集后续行
                         elif answer_found:
                             answer_content.append(line.strip())
                     
                     if answer_content:
-                        # 合并所有解决方案内容行
                         result += "\n".join(answer_content)
                     else:
-                        # 如果没有找到格式化的解决方案，使用原始输出
+                        # 如果没有找到Answer标记，则使用整个stdout
                         result += stdout
+                
+                if "回答:" in result and len(result.split("回答:", 1)[1].strip()) == 0:
+                    result += f"\n\n{stdout}"
+                    if stderr:
+                        result += f"\n\n错误输出:\n{stderr}"
+                
+                clean_result = extract_owl_response(result)
+                
+                # 尝试从stdout中提取图像链接
+                import re
+                image_pattern = r'!\[(.*?)\]\((https?://[^)]+)\)'
+                image_matches = re.findall(image_pattern, stdout)
+                
+                extracted_images = []
+                for alt_text, img_url in image_matches:
+                    extracted_images.append({
+                        "path": img_url,
+                        "description": alt_text if alt_text else "文章中的图表",
+                        "original_url": img_url
+                    })
+                
+                # 创建结构化结果
+                structured_result = {
+                    "instruction": instruction,
+                    "answer": clean_result,
+                    "extracted_images": extracted_images,
+                    "stdout": stdout,
+                    "stderr": stderr
+                }
+                
+                processing_status = {
+                    "status": "completed", 
+                    "result": clean_result, 
+                    "raw_result": result,
+                    "structured_result": structured_result
+                }
+                
+                # 更新结果查看器
+                update_result(structured_result, instruction)
             
-            # 如果没有找到回答，则使用完整输出
-            if "回答:" in result and len(result.split("回答:", 1)[1].strip()) == 0:
-                result += f"\n\n{stdout}"
-                if stderr:
-                    result += f"\n\n错误输出:\n{stderr}"
-            
-            # 使用extract_owl_response函数清理结果
-            clean_result = extract_owl_response(result)
-            
-            # 更新处理状态，使用清理后的结果
-            processing_status = {"status": "completed", "result": clean_result, "raw_result": result}
-            
-            # 更新结果查看器
-            try:
-                from result_viewer import update_result
-                update_result({"content": clean_result})
-                print(f"已更新结果到查看器")
-            except Exception as e:
-                print(f"更新结果查看器时出错: {str(e)}")
+            print(f"已更新结果到查看器")
                 
         except Exception as e:
             error_msg = f"处理结果时出错: {str(e)}"
             print(error_msg)
+            import traceback
+            traceback.print_exc()
+            
             processing_status = {"status": "error", "result": error_msg}
             
+            # 更新错误信息到结果查看器
+            try:
+                update_result(error_msg, instruction)
+            except Exception as e:
+                print(f"更新结果查看器时出错: {str(e)}")
+
     except Exception as e:
         error_msg = f"运行OWL脚本时出错: {str(e)}"
         print(error_msg)
@@ -371,8 +515,7 @@ def run_owl_script(instruction):
         
         # 同样更新错误信息到结果查看器
         try:
-            from result_viewer import update_result
-            update_result({"content": error_msg})
+            update_result(error_msg, instruction)
         except Exception as e:
             print(f"更新结果查看器时出错: {str(e)}")
 
@@ -436,7 +579,6 @@ def main():
     
     # 启动结果查看器服务器
     try:
-        from result_viewer import start_result_viewer
         viewer_thread = threading.Thread(target=start_result_viewer)
         viewer_thread.daemon = True
         viewer_thread.start()
