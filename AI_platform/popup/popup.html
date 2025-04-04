@@ -34,7 +34,6 @@
       border-radius: 4px;
       max-height: 150px;
       overflow-y: auto;
-      display: none;
     }
     .loading {
       text-align: center;
@@ -81,6 +80,49 @@
       color: #555;
       margin-bottom: 5px;
     }
+    /* 弹出层样式 */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      z-index: 1000;
+    }
+    .modal-content {
+      background-color: white;
+      margin: 10% auto;
+      padding: 15px;
+      border-radius: 5px;
+      width: 85%;
+      max-width: 320px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 24px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .close:hover {
+      color: black;
+    }
+    #editQwenPrompt {
+      min-height: 120px;
+      font-size: 12px;
+      line-height: 1.3;
+      font-family: monospace;
+    }
+    h2 {
+      font-size: 16px;
+      margin-top: 5px;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -92,55 +134,60 @@
 
   <div class="input-container">
     <div class="input-label">选择场景：</div>
-    <select id="sceneSelector" style="width: 100%; padding: 5px; margin-bottom: 10px;">
-      <!-- 场景选项将通过 JavaScript 动态生成 -->
-    </select>
-  </div>
-  
-  <!-- 管理场景按钮 -->
-  <button id="manageScenesButton" style="width: 100%; background-color: #fbbc05; color: #333;">管理场景</button>
-  
-  <!-- 管理场景视图 -->
-<div id="sceneManagementView" style="display: none; margin-top: 10px;">
-  <h2>管理场景</h2>
-  <div id="sceneList" style="margin-bottom: 10px;">
-    <!-- 场景列表将通过 JavaScript 动态生成 -->
-  </div>
-  <button id="addSceneButton" style="width: 100%; background-color: #34a853; color: white;">添加场景</button>
-  <button id="backButton" style="width: 100%; background-color: #4285f4; color: white; margin-top: 10px;">返回</button>
-</div>
-
-<!-- 编辑场景视图 -->
-<div id="sceneEditView" style="display: none; margin-top: 10px;">
-  <h2>编辑场景</h2>
-  <div class="input-container">
-    <div class="input-label">场景名称：</div>
-    <input id="editSceneName" type="text" style="width: 100%; padding: 5px; margin-bottom: 10px;" />
-  </div>
-  <div class="input-container">
-    <div class="input-label">Prompt 内容：</div>
-    <textarea id="editScenePrompt" rows="5" style="width: 100%; padding: 5px; resize: none;"></textarea>
-  </div>
-  <button id="deleteSceneButton" style="width: 100%; background-color: #d9534f; color: white; margin-top: 10px;">删除场景</button>
-  <button id="saveSceneButton" style="width: 100%; background-color: #34a853; color: white; margin-top: 10px;">保存</button>
-  <button id="cancelEditButton" style="width: 100%; background-color: #4285f4; color: white; margin-top: 10px;">取消</button>
-</div>
-  
-  <div class="input-container">
-    <div class="input-label">补充说明（可选）：</div>
-    <textarea id="userTaskInput" placeholder="请输入您希望OWL执行的具体任务..." rows="3" style="resize: none; width: 100%;"></textarea>
+    <div style="display: flex; gap: 5px;">
+      <select id="sceneSelector" style="flex-grow: 1; padding: 5px;">
+        <!-- 场景选项将通过 JavaScript 动态生成 -->
+      </select>
+      <button id="manageScenesButton" style="width: auto; margin: 0; padding: 5px 10px; background-color: #fbbc05; color: #333;">管理</button>
+    </div>
   </div>
   
   <div class="input-container">
-    <div class="input-label">生成的指令（可编辑）：</div>
+    <div class="input-label">场景提示：</div>
+    <textarea id="userTaskInput" placeholder="请输入场景提示..." rows="3" style="resize: none; width: 100%;"></textarea>
+  </div>
+  
+  <div class="input-container">
+    <div class="input-label">指令：</div>
     <textarea id="instructionResult" placeholder="指令将在这里显示..." rows="5" style="resize: none; width: 90%;"></textarea>
   </div>
   
   <div id="actionContainer"></div>
   
-  <button id="newTaskButton" style="display: none;">开始新任务</button>
-  <!-- <button id="clearData">清除数据</button> -->
-  <!-- <button id="exportData">导出数据</button> -->
+  <button id="newTaskButton">开始新任务</button>
+
+  <!-- 场景管理弹出层 -->
+  <div id="sceneManagementModal" class="modal">
+    <div class="modal-content">
+      <span class="close" id="closeSceneModal">&times;</span>
+      <div id="sceneManagementView">
+        <h2>管理场景</h2>
+        <div id="sceneList" style="margin-bottom: 10px; max-height: 180px; overflow-y: auto;">
+          <!-- 场景列表将通过 JavaScript 动态生成 -->
+        </div>
+        <button id="addSceneButton" style="width: 100%; background-color: #34a853; color: white;">添加场景</button>
+      </div>
+      
+      <div id="sceneEditView" style="display: none;">
+        <h2>编辑场景</h2>
+        <div class="input-container">
+          <div class="input-label">场景名称：</div>
+          <input id="editSceneName" type="text" style="width: 100%; padding: 5px; margin-bottom: 8px;" />
+        </div>
+        <div class="input-container">
+          <div class="input-label">用户提示内容：</div>
+          <textarea id="editScenePrompt" rows="3" style="width: 100%; padding: 5px; resize: none;"></textarea>
+        </div>
+        <div class="input-container">
+          <div class="input-label">千问Prompt：</div>
+          <textarea id="editQwenPrompt" rows="8" style="width: 100%; padding: 5px; resize: none;"></textarea>
+        </div>
+        <button id="deleteSceneButton" style="width: 100%; background-color: #d9534f; color: white; margin-top: 8px;">删除场景</button>
+        <button id="saveSceneButton" style="width: 100%; background-color: #34a853; color: white; margin-top: 8px;">保存</button>
+        <button id="cancelEditButton" style="width: 100%; background-color: #4285f4; color: white; margin-top: 8px;">返回</button>
+      </div>
+    </div>
+  </div>
 
   <script src="popup.js"></script>
 </body>
