@@ -29,17 +29,15 @@ from camel.toolkits import (
 )
 from camel.types import ModelPlatformType, ModelType
 from camel.societies import RolePlaying
+
 from owl.utils import run_society, DocumentProcessingToolkit
+
 from camel.logger import set_log_level
+
 import pathlib
-import logging
 
-for handler in logging.root.handlers:
-    if isinstance(handler, logging.StreamHandler):
-        handler.setStream(io.TextIOWrapper(handler.stream.buffer, encoding='utf-8'))
-
+# 确保使用UTF-8编码处理输出
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 base_dir = pathlib.Path(__file__).parent.parent
 env_path = base_dir / "owl" / ".env"
@@ -65,40 +63,56 @@ def construct_society(question: str) -> RolePlaying:
     models = {
         "user": ModelFactory.create(
             model_platform=ModelPlatformType.QWEN,
-            model_type=ModelType.QWEN_MAX,
+            model_type=ModelType.QWEN_PLUS,
             model_config_dict={"temperature": 0},
         ),
         "assistant": ModelFactory.create(
             model_platform=ModelPlatformType.QWEN,
-            model_type=ModelType.QWEN_MAX,
+            model_type=ModelType.QWEN_PLUS,
             model_config_dict={"temperature": 0},
         ),
         "browsing": ModelFactory.create(
             model_platform=ModelPlatformType.QWEN,
-            model_type=ModelType.QWEN_VL_MAX,
+            model_type=ModelType.QWEN_VL_PLUS,
             model_config_dict={"temperature": 0},
         ),
         "planning": ModelFactory.create(
             model_platform=ModelPlatformType.QWEN,
-            model_type=ModelType.QWEN_MAX,
+            model_type=ModelType.QWEN_PLUS,
             model_config_dict={"temperature": 0},
         ),
         "video": ModelFactory.create(
             model_platform=ModelPlatformType.QWEN,
-            model_type=ModelType.QWEN_VL_MAX,
+            model_type=ModelType.QWEN_VL_PLUS,
             model_config_dict={"temperature": 0},
         ),
         "image": ModelFactory.create(
             model_platform=ModelPlatformType.QWEN,
-            model_type=ModelType.QWEN_VL_MAX,
+            model_type=ModelType.QWEN_VL_PLUS,
             model_config_dict={"temperature": 0},
         ),
         "document": ModelFactory.create(
             model_platform=ModelPlatformType.QWEN,
-            model_type=ModelType.QWEN_VL_MAX,
+            model_type=ModelType.QWEN_VL_PLUS,
             model_config_dict={"temperature": 0},
         ),
     }
+
+    # 增强指令，要求包含媒体内容链接和概述
+    enhanced_question = f"""{question}
+
+在回答中，请注意以下要点：
+1. 如果找到相关的图片，请提供图片链接并用ask_question_about_image工具简要描述图片内容
+2. 如果找到相关的视频，请提供视频链接并用ask_question_about_video工具概述视频的主要内容
+3. 对于每个媒体资源，请提供简短的"省流版"概述，帮助用户快速了解内容
+4. 确保所有链接格式正确，便于用户访问
+
+处理流程指南：
+1. 首先使用搜索工具search_google获取相关主题的目标URL
+2. 对于每个获取到的URL，使用爬虫功能extract_document_content直接访问并提取内容，而不是模拟人类浏览行为
+3. 分析爬取的内容，提取关键信息、图片和视频链接
+4. 整合所有信息，提供全面且结构化的回答
+"""
 
     # 配置工具包
     tools = [
@@ -126,7 +140,7 @@ def construct_society(question: str) -> RolePlaying:
 
     # 配置任务参数
     task_kwargs = {
-        "task_prompt": question,
+        "task_prompt": enhanced_question,
         "with_task_specify": False,
     }
 
@@ -153,75 +167,57 @@ def process_instruction(instruction: str):
     返回:
         dict: 包含处理结果和聊天历史的字典。
     """
-    url = None
-    url_file_path = os.path.join(base_dir, "current_url.json")
-    
-    try:
-        if os.path.exists(url_file_path):
-            with open(url_file_path, 'r', encoding='utf-8') as f:
-                url_data = json.load(f)
-                url = url_data.get('url')
-    except Exception as e:
-        print(f"读取URL文件时出错: {str(e)}")
-    
-    # 如果找到URL，修改指令
-    if url:
-        enhanced_instruction = f"""我正在阅读这篇学术文章：{url}
-
-我的问题是：{instruction}
-
-请先全面分析这篇文章的内容，然后针对我的问题提供详细、准确的解答。如果文章中有相关的数据、方法、结论或图表，请在回答中具体引用。
-请提取文章中与我问题相关的关键图表，并在回答中包含这些图表的描述和解释。
-如果有重要的数据表格，请将其整理成结构化格式。
-如果我的问题需要更多背景知识来理解，请一并提供。
-最后，请总结文章的创新点和局限性。"""
-        print(f"\033[94m增强后的指令: {enhanced_instruction}\033[0m")
-    else:
-        enhanced_instruction = instruction
-        print(f"\033[94m未找到URL，使用原始指令\033[0m")
-    
-    society = construct_society(enhanced_instruction)
+    society = construct_society(instruction)
     answer, chat_history, token_count = run_society(society, 3)
-    
-    # 提取图像和表格信息
-    extracted_images = []
-    extracted_tables = []
-
-    # TODO：从chat_history中提取图像和表格信息
 
     # 输出结果
-    print(f"\033[94m原始指令: {instruction}\033[0m")
+    print(f"\033[94m指令: {instruction}\033[0m")
     print(f"\033[94m回答: {answer}\033[0m")
-    print(f"\033[94m提取的图像数量: {len(extracted_images)}\033[0m")
-    print(f"\033[94m提取的表格数量: {len(extracted_tables)}\033[0m")
     
     # 返回结构化数据
     return {
         "instruction": instruction,
         "answer": answer,
         "chat_history": chat_history,
-        "token_count": token_count,
-        "extracted_images": extracted_images,
-        "extracted_tables": extracted_tables,
-        "article_url": url
+        "token_count": token_count
     }
+
+
+def read_instruction_from_file(file_path: str):
+    """
+    从文件中读取指令。
+
+    参数:
+        file_path (str): 指令文件的路径。
+
+    返回:
+        str: 读取的指令。
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except Exception as e:
+        print(f"读取指令文件时出错: {str(e)}")
+        return None
 
 
 def main():
     """主函数，用于运行截图指令处理系统。"""
     
     instruction = sys.argv[1]
-    print("this is run_scholar.py")
+    print("this is run_news.py")
     
+    # 处理指令并获取结构化结果
     result = process_instruction(instruction)
     
-    # 创建一个更丰富的结果文件
+    # 将结果写入临时文件
     result_file = os.path.join(base_dir, "owl_result.json")
     with open(result_file, 'w', encoding='utf-8') as f:
         json.dump(result, f, ensure_ascii=False)
     
     # 通知api_server结果已写入文件
     print(f"OWL_RESULT_FILE:{result_file}")
+
 
 if __name__ == "__main__":
     main() 

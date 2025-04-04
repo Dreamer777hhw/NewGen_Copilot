@@ -241,17 +241,37 @@ def run_owl_script(instruction, scene):
     global processing_status
     
     try:
+        # 重置处理状态，确保清除旧结果
+        processing_status = {"status": "processing", "result": None}
+        
+        # 清空结果查看器中的旧结果 - 使用空的占位符消息
+        try:
+            update_result({
+                "instruction": instruction,
+                "content": "正在处理中，请稍候...",
+            })
+        except Exception as e:
+            print(f"更新处理状态时出错: {str(e)}")
+        
+        # 清理主目录下的结果文件
+        main_result_file = os.path.join(base_dir, "owl", "owl_result.json")
+        if os.path.exists(main_result_file):
+            try:
+                os.remove(main_result_file)
+                print(f"已清除旧的结果文件: {main_result_file}")
+            except Exception as e:
+                print(f"清除旧结果文件时出错: {str(e)}")
+        
         # 根据场景选择不同的脚本
         if scene == "编程问题":
             script_name = "run_programming.py"
         elif scene == "学术论文":
             script_name = "run_scholar.py"
-        elif scene == "技术文档":
-            script_name = "run_technical_doc.py"
+        elif scene == "聚焦事件":
+            script_name = "run_news.py"
         elif scene == "产品页面":
             script_name = "run_product.py"
         else:
-            # 如果没有匹配的场景，使用默认脚本
             script_name = "run_default.py"
         
         # 构建脚本路径
@@ -273,7 +293,7 @@ def run_owl_script(instruction, scene):
             processing_status = {"status": "error", "result": error_msg}
             return
         
-        # 设置环境变量
+        # 设置编码环境变量
         env = os.environ.copy()
         env['PYTHONIOENCODING'] = 'utf-8'
         
@@ -325,27 +345,18 @@ def run_owl_script(instruction, scene):
             
             # 更新错误信息到结果查看器
             try:
-                update_result(error_msg, instruction)
+                update_result(error_msg)
             except Exception as e:
                 print(f"更新结果查看器时出错: {str(e)}")
             
             return
         
-        # 从输出中提取JSON结果或结果文件
+        # 从输出中提取结果文件
         result_data = None
         result_file = None
-        html_report = None
         
         for line in stdout.splitlines():
-            if line.startswith("OWL_RESULT_JSON:"):
-                json_str = line.replace("OWL_RESULT_JSON:", "", 1)
-                try:
-                    result_data = json.loads(json_str)
-                    print(f"解析JSON结果成功: {result_data}")
-                    break
-                except json.JSONDecodeError:
-                    print(f"解析JSON结果失败: {json_str}")
-            elif line.startswith("OWL_RESULT_FILE:"):
+            if line.startswith("OWL_RESULT_FILE:"):
                 result_file = line.replace("OWL_RESULT_FILE:", "", 1).strip()
                 print(f"发现结果文件: {result_file}")
                 if os.path.exists(result_file):
@@ -356,9 +367,6 @@ def run_owl_script(instruction, scene):
                         break
                     except Exception as e:
                         print(f"从文件读取JSON结果失败: {str(e)}")
-            elif line.startswith("OWL_HTML_REPORT:"):
-                html_report = line.replace("OWL_HTML_REPORT:", "", 1).strip()
-                print(f"发现HTML报告: {html_report}")
         
         try:
             def clean_text(text):
@@ -391,9 +399,6 @@ def run_owl_script(instruction, scene):
                     if not answer or len(answer) < len(combined_solution):
                         answer = combined_solution
                     
-                    # 提取图像和表格
-                    extracted_images = result_data.get("extracted_images", [])
-                    extracted_tables = result_data.get("extracted_tables", [])
                     article_url = result_data.get("article_url", "")
                     all_rounds = result_data.get("all_rounds", [])
                     
@@ -401,16 +406,13 @@ def run_owl_script(instruction, scene):
                     structured_result = {
                         "instruction": instruction,
                         "answer": answer,
-                        "extracted_images": extracted_images,
-                        "extracted_tables": extracted_tables,
                         "article_url": article_url,
                         "all_rounds": all_rounds,
-                        "html_report": html_report,
                         "chat_history": chat_history
                     }
                     
                     # 更新结果查看器
-                    update_result(structured_result, instruction)
+                    update_result(structured_result)
                     
                     # 更新处理状态
                     processing_status = {
@@ -424,7 +426,7 @@ def run_owl_script(instruction, scene):
                     clean_result = extract_owl_response(result)
                     
                     processing_status = {"status": "completed", "result": clean_result, "raw_result": result}
-                    update_result(clean_result, instruction)
+                    update_result(clean_result)
             else:
                 # 如果没有结构化数据，从stdout中提取
                 result = clean_text(f"指令: {instruction}\n\n回答: ")
@@ -456,24 +458,12 @@ def run_owl_script(instruction, scene):
                 
                 clean_result = extract_owl_response(result)
                 
-                # 尝试从stdout中提取图像链接
-                import re
-                image_pattern = r'!\[(.*?)\]\((https?://[^)]+)\)'
-                image_matches = re.findall(image_pattern, stdout)
-                
-                extracted_images = []
-                for alt_text, img_url in image_matches:
-                    extracted_images.append({
-                        "path": img_url,
-                        "description": alt_text if alt_text else "文章中的图表",
-                        "original_url": img_url
-                    })
-                
                 # 创建结构化结果
                 structured_result = {
                     "instruction": instruction,
                     "answer": clean_result,
-                    "extracted_images": extracted_images,
+                    "extracted_images": [],  # 添加空的图像列表
+                    "extracted_tables": [],  # 添加空的表格列表
                     "stdout": stdout,
                     "stderr": stderr
                 }
@@ -485,8 +475,8 @@ def run_owl_script(instruction, scene):
                     "structured_result": structured_result
                 }
                 
-                # 更新结果查看器
-                update_result(structured_result, instruction)
+                # 更新结果查看器 - 传递完整的结构化对象
+                update_result(structured_result)
             
             print(f"已更新结果到查看器")
                 
@@ -500,7 +490,7 @@ def run_owl_script(instruction, scene):
             
             # 更新错误信息到结果查看器
             try:
-                update_result(error_msg, instruction)
+                update_result(error_msg)
             except Exception as e:
                 print(f"更新结果查看器时出错: {str(e)}")
 
@@ -515,7 +505,7 @@ def run_owl_script(instruction, scene):
         
         # 同样更新错误信息到结果查看器
         try:
-            update_result(error_msg, instruction)
+            update_result(error_msg)
         except Exception as e:
             print(f"更新结果查看器时出错: {str(e)}")
 
@@ -565,7 +555,7 @@ def main():
     global processing_status
     
     # 检查并释放需要的端口
-    ports_to_check = [7861, 7865, 7866]  # API服务器、结果查看器HTTP、WebSocket端口
+    ports_to_check = [7861, 7865, 7866]
     
     for check_port in ports_to_check:
         if is_port_in_use(check_port):

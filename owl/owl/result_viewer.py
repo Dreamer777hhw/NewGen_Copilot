@@ -2,15 +2,11 @@ import os
 import http.server
 import socketserver
 import threading
-import time
 from pathlib import Path
 import queue
 import json
-import asyncio
 from datetime import datetime
-from clean_owl_results import extract_owl_response
 import shutil
-import base64
 import re
 
 # 创建一个全局队列用于存储最新结果
@@ -69,90 +65,131 @@ HTML_TEMPLATE = """
     <style>
         body {{
             font-family: Arial, sans-serif;
-            line-height: 1.6;
+            line-height: 1.4;
             margin: 0;
-            padding: 20px;
+            padding: 15px;
             background-color: #f5f5f5;
+            max-width: 1200px;
+            margin: 0 auto;
         }}
         h1, h2, h3 {{
             color: #333;
+            margin-top: 10px;
+            margin-bottom: 12px;
+            line-height: 1.3;
+        }}
+        h1 {{
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 8px;
         }}
         .button-container {{
-            margin: 20px 0;
+            margin: 10px 0;
         }}
         button {{
             background-color: #4CAF50;
             color: white;
-            padding: 10px 15px;
+            padding: 8px 15px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 15px;
+            transition: background-color 0.3s;
         }}
         button:hover {{
             background-color: #45a049;
         }}
         .result-container {{
             background-color: white;
-            padding: 20px;
+            padding: 10px;
             border-radius: 5px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            margin-bottom: 12px;
             white-space: pre-wrap;
         }}
         .history-container {{
-            margin-top: 30px;
+            margin-top: 15px;
+        }}
+        .history-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
         }}
         .history-item {{
             background-color: white;
-            padding: 15px;
+            padding: 12px;
             border-radius: 5px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }}
         .timestamp {{
             color: #666;
             font-size: 0.9em;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
         }}
         .instruction {{
             background-color: #e6f7ff;
-            padding: 10px;
+            padding: 8px;
             border-left: 4px solid #1890ff;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
             font-style: italic;
             display: block;
+            line-height: 1.3;
         }}
         .content {{
             background-color: #f9f9f9;
-            padding: 15px;
+            padding: 10px;
             border-radius: 4px;
             white-space: pre-wrap;
+            line-height: 1.4;
+        }}
+        .content p {{
+            margin-top: 0.5em;
+            margin-bottom: 0.5em;
+        }}
+        .content ul, .content ol {{
+            margin-top: 0.3em;
+            margin-bottom: 0.3em;
+            padding-left: 1.5em;
+        }}
+        .content li {{
+            margin-bottom: 0.2em;
+            line-height: 1.3;
+        }}
+        .content li p {{
+            margin-top: 0.2em;
+            margin-bottom: 0.2em;
+        }}
+        .content ul ul, .content ol ol, .content ul ol, .content ol ul {{
+            margin-top: 0.2em;
+            margin-bottom: 0.2em;
         }}
         .result-box {{
             border: 1px solid #ddd;
             border-radius: 5px;
             overflow: hidden;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }}
         .instruction-section {{
             background-color: #e6f7ff;
-            padding: 12px 15px;
+            padding: 8px 10px;
             border-bottom: 1px solid #ddd;
+            font-style: italic;
+            line-height: 1.3;
         }}
         .answer-section {{
-            padding: 15px;
+            padding: 10px;
         }}
         .answer-section .content {{
-            margin-top: 10px;
+            margin-top: 6px;
         }}
         .image-section {{
-            margin-top: 20px;
+            margin-top: 12px;
             border-top: 1px solid #eee;
-            padding-top: 15px;
+            padding-top: 10px;
         }}
         .image-container {{
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }}
         .image-container img {{
             max-width: 100%;
@@ -162,25 +199,30 @@ HTML_TEMPLATE = """
         .image-description {{
             font-style: italic;
             color: #666;
-            margin-top: 5px;
+            margin-top: 4px;
+            line-height: 1.3;
         }}
         .table-section {{
-            margin-top: 20px;
+            margin-top: 12px;
             border-top: 1px solid #eee;
-            padding-top: 15px;
+            padding-top: 10px;
             overflow-x: auto;
         }}
-        .report-link {{
-            display: inline-block;
-            margin-top: 10px;
-            background-color: #1890ff;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            text-decoration: none;
-        }}
-        .report-link:hover {{
-            background-color: #0c7cd5;
+        /* 添加响应式设计 */
+        @media (max-width: 768px) {{
+            body {{
+                padding: 8px;
+            }}
+            .result-container, .history-item {{
+                padding: 10px;
+            }}
+            .history-header {{
+                flex-direction: column;
+                align-items: flex-start;
+            }}
+            .history-header button {{
+                margin-top: 8px;
+            }}
         }}
     </style>
     <script>
@@ -260,16 +302,17 @@ HTML_TEMPLATE = """
     
     <div class="button-container">
         <button id="new-task-button">开始新任务</button>
-        <button id="clear-history-button" style="background-color: #f44336;">清除历史记录</button>
     </div>
     
     <div class="result-container">
-
         <div id="result-area">{result}</div>
     </div>
     
     <div class="history-container">
-        <h2>历史记录</h2>
+        <div class="history-header">
+            <h2>历史记录</h2>
+            <button id="clear-history-button" style="background-color: #f44336;">清除历史记录</button>
+        </div>
         {history}
     </div>
 </body>
@@ -282,7 +325,7 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
         # 处理图像请求
         if self.path.startswith('/images/'):
             try:
-                image_path = self.path[8:]  # 移除 '/images/' 前缀
+                image_path = self.path[8:]
                 self.send_response(200)
                 if image_path.endswith('.png'):
                     self.send_header('Content-type', 'image/png')
@@ -298,22 +341,7 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
                 print(f"提供图像时出错: {str(e)}")
                 self.send_error(404, "File not found")
                 return
-        # 处理报告请求
-        elif self.path.startswith('/reports/'):
-            try:
-                report_path = self.path[1:]  # 移除开头的 '/'
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html')
-                self.end_headers()
-                with open(report_path, 'rb') as f:
-                    self.wfile.write(f.read())
-                return
-            except Exception as e:
-                print(f"提供报告时出错: {str(e)}")
-                self.send_error(404, "File not found")
-                return
         elif self.path == '/':
-            # 返回HTML页面
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
@@ -322,9 +350,7 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
             global current_result
             current_result = "准备好接收新任务..."
             
-            # 生成历史记录HTML，按时间倒序排列（最新的在最前面）
             history_html = ""
-            # 对历史记录按时间戳倒序排序
             sorted_history = sorted(results_history, 
                                    key=lambda x: x.get('timestamp', ''), 
                                    reverse=True)
@@ -332,17 +358,16 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
             for item in sorted_history:
                 timestamp = item.get('timestamp', '')
                 result = item.get('result', '')
-                instruction = item.get('instruction', '')  # 获取指令
-                images = item.get('images', [])  # 获取图像列表
-                tables = item.get('tables', [])  # 获取表格列表
-                report_path = item.get('report_path', '')  # 获取HTML报告路径
+                instruction = item.get('instruction', '')
+                images = item.get('images', [])
+                tables = item.get('tables', [])
                 
                 # 添加指令显示区域
                 instruction_html = ""
-                if instruction and instruction.strip():  # 确保指令不为空
+                if instruction and instruction.strip():
                     # 对指令进行HTML转义，防止XSS攻击
                     instruction = instruction.replace('<', '&lt;').replace('>', '&gt;')
-                    instruction_html = f'<div class="instruction"><strong>指令:</strong> {instruction}</div>'
+                    instruction_html = f'<div class="instruction"><strong>指令:</strong> <em>{instruction}</em></div>'
                 
                 # 添加图像显示区域
                 images_html = ""
@@ -375,11 +400,6 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
                         '''
                     tables_html += '</div>'
                 
-                # 添加报告链接
-                report_html = ""
-                if report_path:
-                    report_html = f'<a href="/{report_path}" target="_blank" class="report-link">查看完整分析报告</a>'
-                
                 history_html += f"""
                 <div class="history-item">
                     <h3>任务结果</h3>
@@ -388,7 +408,6 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
                     <div class="content">{result}</div>
                     {images_html}
                     {tables_html}
-                    {report_html}
                 </div>
                 """
             
@@ -398,154 +417,39 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
 # 添加一个函数用于更新结果
-def update_result(data, instruction):
+def update_result(data):
     """更新当前结果并广播给所有连接的客户端"""
     global current_result, results_history
-    
+    instruction = data.get("instruction", "")
     # 处理数据
-    if isinstance(data, dict):
-        # 检查是否是从run_scholar.py返回的结构化数据
-        if "answer" in data and "extracted_images" in data:
-            content = data["answer"]
-            extracted_images = data["extracted_images"]
-            extracted_tables = data["extracted_tables"]
-            article_url = data.get("article_url", "")
+    content = data["answer"]
+    article_url = data.get("article_url", "")
             
-            clean_content = re.sub(r'(?<!\n)\n(?!\n)', ' ', content)  # 单换行转空格
-            clean_content = re.sub(r'\n{2,}', '\n', clean_content)  # 合并连续2+换行为1个
-            clean_content = clean_content.strip()  # 去除首尾空白
+    # 处理换行符
+    clean_content = content.strip()
+    clean_content = re.sub(r'\n{2,}', '\n\n', clean_content)
             
-            # 保存HTML报告
-            report_path = ""
-            if "OWL_HTML_REPORT" in data:
-                original_report = data["OWL_HTML_REPORT"]
-                if os.path.exists(original_report):
-                    # 创建一个唯一的报告文件名
-                    timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
-                    report_filename = f"report_{timestamp_str}.html"
-                    report_path = os.path.join(REPORTS_DIR, report_filename)
-                    
-                    # 复制报告文件
-                    shutil.copy2(original_report, report_path)
-                    report_path = report_path.replace("\\", "/")  # 确保路径格式正确
-            
-            # 创建一个包含指令和内容的结构化显示框架
-            current_result = f"""
-            <div class="result-box">
-                <div class="instruction-section">
-                    <strong>指令:</strong> {instruction if instruction else "无指令"}
-                </div>
-                <div class="answer-section">
-                    <strong>解答:</strong>
-                    <div class="content">{clean_content}</div>
-                </div>
-            """
-            
-            # 添加图像部分
-            if extracted_images:
-                current_result += '<div class="image-section"><h3>提取的图像</h3>'
-                for i, img in enumerate(extracted_images):
-                    img_path = img.get('path', '')
-                    img_desc = img.get('description', '图像描述')
-                    if img_path and os.path.exists(img_path):
-                        current_result += f'''
-                        <div class="image-container">
-                            <img src="/images/{img_path}" alt="图像 {i+1}">
-                            <p class="image-description">{img_desc}</p>
-                        </div>
-                        '''
-                current_result += '</div>'
-            
-            # 添加表格部分
-            if extracted_tables:
-                current_result += '<div class="table-section"><h3>提取的表格</h3>'
-                for i, table in enumerate(extracted_tables):
-                    table_data = table.get('data', '')
-                    table_desc = table.get('description', '表格描述')
-                    current_result += f'''
-                    <div class="table-container">
-                        <p class="table-description">{table_desc}</p>
-                        {table_data}
-                    </div>
-                    '''
-                current_result += '</div>'
-            
-            # 添加报告链接
-            if report_path:
-                current_result += f'<a href="/{report_path}" target="_blank" class="report-link">查看完整分析报告</a>'
-            
-            current_result += "</div>"
-            
-            # 添加到历史记录
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            results_history.insert(0, {
-                "timestamp": timestamp, 
-                "result": clean_content,
-                "instruction": instruction,
-                "images": extracted_images,
-                "tables": extracted_tables,
-                "report_path": report_path,
-                "article_url": article_url
-            })
-        else:
-            if "content" in data:
-                content = data["content"]
-            else:
-                # 将字典转换为字符串
-                content = json.dumps(data, ensure_ascii=False)
-            
-            clean_content = re.sub(r'(?<!\n)\n(?!\n)', ' ', content)  # 单换行转空格
-            clean_content = re.sub(r'\n{2,}', '\n', clean_content)  # 合并连续2+换行为1个
-            clean_content = clean_content.strip()  # 去除首尾空白
-            
-            # 创建一个包含指令和内容的结构化显示框架
-            current_result = f"""
-            <div class="result-box">
-                <div class="instruction-section">
-                    <strong>指令:</strong> {instruction if instruction else "无指令"}
-                </div>
-                <div class="answer-section">
-                    <strong>解答:</strong>
-                    <div class="content">{clean_content}</div>
-                </div>
-            </div>
-            """
-            
-            # 添加到历史记录
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            results_history.insert(0, {
-                "timestamp": timestamp, 
-                "result": clean_content,
-                "instruction": instruction
-            })
-    else:
-        content = str(data)
-
-        clean_content = re.sub(r'(?<!\n)\n(?!\n)', ' ', content)  # 单换行转空格
-        clean_content = re.sub(r'\n{2,}', '\n', clean_content)  # 合并连续2+换行为1个
-        clean_content = clean_content.strip()  # 去除首尾空白
-        
-        # 创建一个包含指令和内容的结构化显示框架``
-        current_result = f"""
-        <div class="result-box">
-            <div class="instruction-section">
-                <strong>指令:</strong> {instruction if instruction else "无指令"}
-            </div>
-            <div class="answer-section">
-                <strong>解答:</strong>
-                <div class="content">{clean_content}</div>
-            </div>
+    # 创建一个包含指令和内容的结构化显示框架 - 减少空白区域
+    current_result = f"""<div class="result-box">
+        <div class="instruction-section">
+            <strong>指令:</strong> <em>{instruction if instruction else "无指令"}</em>
         </div>
-        """
-        
-        # 添加到历史记录
+        <div class="answer-section">
+            <strong>解答:</strong>
+            <div class="content">{clean_content}</div>
+        </div>
+    </div>"""
+            
+    # 只有当消息不是"正在处理中"时才添加到历史记录
+    if not content.startswith("正在处理中"):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         results_history.insert(0, {
             "timestamp": timestamp, 
             "result": clean_content,
-            "instruction": instruction
+            "instruction": instruction,
+            "article_url": article_url
         })
-    
+ 
     # 保存历史记录
     save_history()
     
