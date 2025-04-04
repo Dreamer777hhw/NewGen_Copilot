@@ -263,14 +263,16 @@ def run_owl_script(instruction, scene):
                 print(f"清除旧结果文件时出错: {str(e)}")
         
         # 根据场景选择不同的脚本
-        if scene == "编程问题":
-            script_name = "run_programming.py"
+        if scene == "文档助手":
+            script_name = "run_file.py"
         elif scene == "学术论文":
             script_name = "run_scholar.py"
         elif scene == "聚焦事件":
             script_name = "run_news.py"
         elif scene == "产品页面":
             script_name = "run_product.py"
+        elif scene == "旅行助手":
+            script_name = "run_travel.py"
         else:
             script_name = "run_default.py"
         
