@@ -26,6 +26,8 @@ from camel.toolkits import (
     VideoAnalysisToolkit,
     BrowserToolkit,
     FileWriteToolkit,
+    arxiv_toolkit,
+    google_scholar_toolkit,
 )
 from camel.types import ModelPlatformType, ModelType
 from camel.societies import RolePlaying
@@ -108,6 +110,7 @@ def construct_society(question: str) -> RolePlaying:
             planning_agent_model=models["planning"],
             output_language="Chinese",
         ).get_tools(),
+
         *VideoAnalysisToolkit(model=models["video"]).get_tools(),
         *CodeExecutionToolkit(sandbox="subprocess", verbose=True).get_tools(),
         *ImageAnalysisToolkit(model=models["image"]).get_tools(),
@@ -118,6 +121,8 @@ def construct_society(question: str) -> RolePlaying:
         *ExcelToolkit().get_tools(),
         *DocumentProcessingToolkit(model=models["document"]).get_tools(),
         *FileWriteToolkit(output_dir="./").get_tools(),
+        *arxiv_toolkit().get_tools(),
+        *google_scholar_toolkit().get_tools(),
     ]
 
     # 配置智能体角色和参数
