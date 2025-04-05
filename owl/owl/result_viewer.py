@@ -208,6 +208,17 @@ HTML_TEMPLATE = """
             padding-top: 10px;
             overflow-x: auto;
         }}
+        .scene-tag {{
+            margin-bottom: 8px;
+        }}
+        .scene-tag span {{
+            background-color: #e6f7ff;
+            color: #0066cc;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            display: inline-block;
+        }}
         /* 添加响应式设计 */
         @media (max-width: 768px) {{
             body {{
@@ -361,6 +372,7 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
                 instruction = item.get('instruction', '')
                 images = item.get('images', [])
                 tables = item.get('tables', [])
+                scene = item.get('scene', '默认场景')
                 
                 # 添加指令显示区域
                 instruction_html = ""
@@ -368,6 +380,9 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
                     # 对指令进行HTML转义，防止XSS攻击
                     instruction = instruction.replace('<', '&lt;').replace('>', '&gt;')
                     instruction_html = f'<div class="instruction"><strong>指令:</strong> <em>{instruction}</em></div>'
+                
+                # 添加场景显示
+                scene_html = f'<div class="scene-tag"><span>场景: {scene}</span></div>'
                 
                 # 添加图像显示区域
                 images_html = ""
@@ -404,6 +419,7 @@ class ResultViewerHandler(http.server.SimpleHTTPRequestHandler):
                 <div class="history-item">
                     <h3>任务结果</h3>
                     <div class="timestamp">{timestamp}</div>
+                    {scene_html}
                     {instruction_html}
                     <div class="content">{result}</div>
                     {images_html}
@@ -443,11 +459,13 @@ def update_result(data):
     # 只有当消息不是"正在处理中"时才添加到历史记录
     if not content.startswith("正在处理中"):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        scene = data.get("scene", "默认场景")
         results_history.insert(0, {
             "timestamp": timestamp, 
             "result": clean_content,
             "instruction": instruction,
-            "article_url": article_url
+            "article_url": article_url,
+            "scene": scene
         })
  
     # 保存历史记录

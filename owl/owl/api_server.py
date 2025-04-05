@@ -248,6 +248,7 @@ def run_owl_script(instruction, scene):
         try:
             update_result({
                 "instruction": instruction,
+                "scene": scene,  # 添加场景信息
                 "content": "正在处理中，请稍候...",
             })
         except Exception as e:
@@ -407,6 +408,7 @@ def run_owl_script(instruction, scene):
                     # 创建结构化结果
                     structured_result = {
                         "instruction": instruction,
+                        "scene": scene,
                         "answer": answer,
                         "article_url": article_url,
                         "all_rounds": all_rounds,
@@ -463,9 +465,8 @@ def run_owl_script(instruction, scene):
                 # 创建结构化结果
                 structured_result = {
                     "instruction": instruction,
+                    "scene": scene,
                     "answer": clean_result,
-                    "extracted_images": [],  # 添加空的图像列表
-                    "extracted_tables": [],  # 添加空的表格列表
                     "stdout": stdout,
                     "stderr": stderr
                 }
@@ -477,7 +478,6 @@ def run_owl_script(instruction, scene):
                     "structured_result": structured_result
                 }
                 
-                # 更新结果查看器 - 传递完整的结构化对象
                 update_result(structured_result)
             
             print(f"已更新结果到查看器")
