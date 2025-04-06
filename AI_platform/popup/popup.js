@@ -369,8 +369,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 使用阿里云DashScope API (OpenAI兼容模式)
     const apiUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-    const apiKey = 'sk-85b3232583484cd68b1474832810edaa'; // 您的API密钥
-    // const apiKey = 'YOUR-API-KEY'; // 您的API密钥
+    const apiKey = 'YOUR-API-KEY'; // 您的API密钥
     
     // 修正请求格式
     const requestData = {
