@@ -1,16 +1,11 @@
-# ========= Copyright 2023-2024 @ CAMEL-AI.org. All Rights Reserved. =========
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.def do_POST(self):
-# ========= Copyright 2023-2024 @ CAMEL-AI.org. All Rights Reserved. =========
+"""
+    * @FileDescription: owl后端服务器
+    * @Author: 胡皓文
+    * @Date: 2025-04-02
+    * @LastEditors: 胡皓文
+    * @LastEditTime: 2025-04-06
+    * @Contributors: 胡皓文
+"""
 
 import os
 import sys
@@ -24,7 +19,8 @@ import queue
 import time
 import socket
 from clean_owl_results import extract_owl_response
-from result_viewer import update_result, start_result_viewer
+from result_viewer import update_result, start_result_viewer, DB_FILE
+import sqlite3  # 添加sqlite3导入
 
 # 获取项目根目录
 base_dir = pathlib.Path(__file__).parent.parent
@@ -45,7 +41,7 @@ class OWLRequestHandler(http.server.BaseHTTPRequestHandler):
         # 处理CORS预检请求
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS, GET')  # 添加GET方法
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
     
@@ -176,6 +172,46 @@ class OWLRequestHandler(http.server.BaseHTTPRequestHandler):
             
             except Exception as e:
                 self._send_error_response(str(e))
+        elif self.path == '/api/history':
+            # 从数据库获取历史记录
+            try:
+                history = self._get_history_from_db()
+                self._send_json_response({
+                    'status': 'success',
+                    'history': history,
+                    'totalPages': 1  # 简化版，实际应基于记录总数和每页显示数量计算
+                })
+            except Exception as e:
+                self._send_error_response(f"获取历史记录失败: {str(e)}")
+        elif self.path == '/api/db-stats':
+            # 获取数据库统计信息
+            try:
+                stats = self._get_db_stats()
+                self._send_json_response({
+                    'status': 'success',
+                    **stats
+                })
+            except Exception as e:
+                self._send_error_response(f"获取数据库统计信息失败: {str(e)}")
+        elif self.path.startswith('/api/history/'):
+            # 获取单条历史记录详情
+            try:
+                # 从路径中提取ID
+                record_id = self.path.split('/')[-1]
+                if not record_id.isdigit():
+                    self._send_error_response("无效的记录ID")
+                    return
+                
+                record = self._get_history_detail_from_db(int(record_id))
+                if record:
+                    self._send_json_response({
+                        'status': 'success',
+                        'record': record
+                    })
+                else:
+                    self._send_error_response("未找到指定的记录", 404)
+            except Exception as e:
+                self._send_error_response(f"获取历史记录详情失败: {str(e)}")
         else:
             self._send_error_response('未知的API端点')
     
@@ -205,6 +241,110 @@ class OWLRequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(response.encode('utf-8'))
+
+    def _get_history_from_db(self):
+        """从数据库获取历史记录"""
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # 查询历史记录，只返回基本信息
+        cursor.execute('''
+        SELECT id, timestamp, instruction, scene
+        FROM results_history
+        ORDER BY timestamp DESC
+        LIMIT 100
+        ''')
+        
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                'id': row['id'],
+                'timestamp': row['timestamp'],
+                'instruction': row['instruction'],
+                'scene': row['scene']
+            })
+        
+        conn.close()
+        return results
+    
+    def _get_history_detail_from_db(self, record_id):
+        """从数据库获取单条历史记录的详细信息"""
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # 查询指定ID的历史记录详情
+        cursor.execute('''
+        SELECT id, timestamp, result, instruction, article_url, scene, images, tables
+        FROM results_history
+        WHERE id = ?
+        ''', (record_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            return None
+        
+        # 构建详情对象
+        detail = {
+            'id': row['id'],
+            'timestamp': row['timestamp'],
+            'result': row['result'],
+            'instruction': row['instruction'],
+            'article_url': row['article_url'],
+            'scene': row['scene']
+        }
+        
+        # 解析JSON字段
+        if row['images']:
+            try:
+                detail['images'] = json.loads(row['images'])
+            except:
+                detail['images'] = []
+        
+        if row['tables']:
+            try:
+                detail['tables'] = json.loads(row['tables'])
+            except:
+                detail['tables'] = []
+        
+        return detail
+
+    def _get_db_stats(self):
+        """获取数据库统计信息"""
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # 获取总记录数
+        cursor.execute('SELECT COUNT(*) FROM results_history')
+        total_records = cursor.fetchone()[0]
+        
+        # 获取最新记录时间
+        cursor.execute('SELECT timestamp FROM results_history ORDER BY timestamp DESC LIMIT 1')
+        latest_record_row = cursor.fetchone()
+        latest_record = latest_record_row[0] if latest_record_row else "无记录"
+        
+        # 获取数据库文件大小
+        try:
+            db_size_bytes = os.path.getsize(DB_FILE)
+            if db_size_bytes < 1024:
+                db_size = f"{db_size_bytes} B"
+            elif db_size_bytes < 1024 * 1024:
+                db_size = f"{db_size_bytes / 1024:.2f} KB"
+            else:
+                db_size = f"{db_size_bytes / (1024 * 1024):.2f} MB"
+        except:
+            db_size = "未知"
+        
+        conn.close()
+        
+        return {
+            'totalRecords': total_records,
+            'latestRecord': latest_record,
+            'dbSize': db_size
+        }
 
 def read_stream(stream, output_list, prefix=""):
     """
