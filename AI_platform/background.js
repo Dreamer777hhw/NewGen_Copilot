@@ -1,3 +1,10 @@
+// * @FileDescription: 插件后台脚本
+// * @Author: 胡皓文
+// * @Date: 2025-04-01
+// * @LastEditors: 胡皓文
+// * @LastEditTime: 2025-04-01
+// * @Contributors: 胡皓文
+
 // 处理来自content.js的行为数据和其他消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('[DEBUG] Received message:', message);

@@ -1,16 +1,11 @@
-# ========= Copyright 2023-2024 @ CAMEL-AI.org. All Rights Reserved. =========
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ========= Copyright 2023-2024 @ CAMEL-AI.org. All Rights Reserved. =========
+"""
+    * @FileDescription: 聚焦事件脚本
+    * @Author: 胡皓文
+    * @Date: 2025-04-03
+    * @LastEditors: 胡皓文
+    * @LastEditTime: 2025-04-04
+    * @Contributors: 胡皓文
+"""
 
 import sys
 import os
@@ -98,20 +93,28 @@ def construct_society(question: str) -> RolePlaying:
         ),
     }
 
-    # 增强指令，要求包含媒体内容链接和概述
+    # 增强指令，要求包含综合新闻分析和"省流"简报
     enhanced_question = f"""{question}
 
-在回答中，请注意以下要点：
-1. 如果找到相关的图片，请提供图片链接并用ask_question_about_image工具简要描述图片内容
-2. 如果找到相关的视频，请提供视频链接并用ask_question_about_video工具概述视频的主要内容
-3. 对于每个媒体资源，请提供简短的"省流版"概述，帮助用户快速了解内容
-4. 确保所有链接格式正确，便于用户访问
+在回答中，请执行以下任务：
+1. 搜集多个权威新闻来源对该事件的报道，确保至少包含3个不同来源
+2. 对各个新闻报道进行客观评判，识别事实与观点的区别
+3. 提供一份综合"省流"简报，包含：
+   - 事件的客观发展过程和时间线
+   - 相关背景信息和必要的上下文
+   - 不同媒体对事件的报道角度对比
+   - 网友/公众对该事件的主要观点和讨论热点
+4. 对于重要的媒体内容：
+   - 提供关键图片链接并简要描述内容
+   - 提供重要视频链接并概述主要内容
+5. 最后给出对信息可信度的评估和建议关注的要点
 
 处理流程指南：
-1. 首先使用搜索工具search_google获取相关主题的目标URL
-2. 对于每个获取到的URL，使用爬虫功能extract_document_content直接访问并提取内容，而不是模拟人类浏览行为
-3. 分析爬取的内容，提取关键信息、图片和视频链接
-4. 整合所有信息，提供全面且结构化的回答
+1. 使用search_google和search_baidu获取多个不同来源的相关报道
+2. 对于每个获取到的URL，使用extract_document_content爬取内容
+3. 分析各来源的内容，对比不同视角和报道侧重点
+4. 通过搜索引擎或社交媒体相关功能，获取公众对事件的讨论
+5. 整合所有信息，提供全面、客观且结构化的分析简报
 """
 
     # 配置工具包
@@ -168,7 +171,7 @@ def process_instruction(instruction: str):
         dict: 包含处理结果和聊天历史的字典。
     """
     society = construct_society(instruction)
-    answer, chat_history, token_count = run_society(society, 3)
+    answer, chat_history, token_count = run_society(society, 5)
 
     # 输出结果
     print(f"\033[94m指令: {instruction}\033[0m")

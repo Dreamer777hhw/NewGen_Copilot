@@ -1,8 +1,10 @@
-## Agent赋能电脑助理
+## NewGEN Copilot
+
+本项目中，我们的核心理念是应用最新的多智能协作体技术，进行一个其在浏览器端的部署实践。我们使用OWL多智能体系统，并将其部署在本地后台服务器，通过浏览器插件进行交互。因此使用到了开源的OWL系统，以及一种可被调用的API，包括大模型API，以及Google搜索API，FireCrawl爬虫API等。整体的系统结构都是我们自己设计并规定输入输出，并进行一定的修改。核心在于多智能体系统的构建，以及浏览器插件的构建。在理解OWL系统的运行逻辑后，我们对其进行了一定的修改，使其能够更好地适应我们的需求，并且将其作为我们的脚本的一部分，实行最为关键的指令处理操作。
 
 ### 项目结构
 
-以下是有用的文件
+以下是原创或者修改的文件
 
 ```
 owl/owl/
@@ -10,8 +12,13 @@ owl/owl/
 ├── clean_owl_results.py
 ├── result_reviewer.py
 ├── start_screenshot_pipeline.py
-├── examples/run_screenshot_instruction.py
-└──  owl/utils/enhanced_role_playing.py
+├── examples/run_default.py
+├── examples/run_file.py
+├── examples/run_news.py
+├── examples/run_product.py
+├── examples/run_scholar.py
+├── examples/run_travel.py
+└── owl/utils/enhanced_role_playing.py
 
 AI_platform/
 ├── content.js
@@ -47,7 +54,12 @@ owl文件夹包含OWL多智能体系统的核心组件：
 1. **api_server.py**：HTTP API服务器，接收浏览器插件的指令请求并返回处理结果
 2. **result_reviewer.py**：结果查看器，通过WebSocket实时显示处理进度和结果
 3. **start_screenshot_pipeline.py**：系统启动脚本，初始化整个处理流程（**是主程序**）
-4. **examples/run_screenshot_instruction.py**：自定义的处理截图指令的脚本
+4. **examples/run_default.py**：默认的指令处理脚本
+5. **examples/run_file.py**：文档处理脚本
+6. **examples/run_news.py**：新闻处理脚本
+7. **examples/run_product.py**：购物处理脚本
+8. **examples/run_scholar.py**：学术论文处理脚本
+9. **examples/run_travel.py**：旅行处理脚本
 
 OWL系统工作流程：接收指令 → 构建多智能体社会(enhanced_role_playing.py中定义了run_society函数，但是应该不用修改) → 智能体协作处理任务 → 生成结果 → 通过WebSocket广播结果会浏览器中。
 
@@ -58,14 +70,3 @@ OWL系统工作流程：接收指令 → 构建多智能体社会(enhanced_role_
 3. 直接运行python start_screenshot_pipeline.py
 4. 在浏览器中使用插件截屏并发送指令
 5. 在浏览器中查看处理结果
-
-### 可行的工作
-
-1. 针对特定任务的prompt优化，在特定的网站中有特别的功能，比如说在知乎中，可以针对特定的回答进行总结，或者在arxiv中，则给出一些相关的论文链接。
-2. 安全问题？可以进行一项对比实验，是否给出一些有害危险的指令，模型会进行不好的操作，比如说让owl给攻击者发送用户信息的邮件等，可以进行一定的安全防护
-3. demo网站，以及UI的设计，如何比较好地显示结果
-4. 提取prompt的模型进行微调？需要收集数据
-
-截屏后暂存选择区域，快捷键
-预处理一下输入的instruction，给出预设使用场景（把自定义的加上）
-跳转标签页？出了结果再弹出来。

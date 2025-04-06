@@ -1,16 +1,11 @@
-# ========= Copyright 2023-2024 @ CAMEL-AI.org. All Rights Reserved. =========
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ========= Copyright 2023-2024 @ CAMEL-AI.org. All Rights Reserved. =========
+"""
+    * @FileDescription: 学术论文脚本
+    * @Author: 胡皓文
+    * @Date: 2025-04-02
+    * @LastEditors: 胡皓文
+    * @LastEditTime: 2025-04-03
+    * @Contributors: 胡皓文
+"""
 
 import sys
 import os
@@ -26,8 +21,8 @@ from camel.toolkits import (
     VideoAnalysisToolkit,
     BrowserToolkit,
     FileWriteToolkit,
-    arxiv_toolkit,
-    google_scholar_toolkit,
+    ArxivToolkit,
+    # GoogleScholarToolkit,
 )
 from camel.types import ModelPlatformType, ModelType
 from camel.societies import RolePlaying
@@ -121,8 +116,8 @@ def construct_society(question: str) -> RolePlaying:
         *ExcelToolkit().get_tools(),
         *DocumentProcessingToolkit(model=models["document"]).get_tools(),
         *FileWriteToolkit(output_dir="./").get_tools(),
-        *arxiv_toolkit().get_tools(),
-        *google_scholar_toolkit().get_tools(),
+        *ArxivToolkit().get_tools(),
+        # *GoogleScholarToolkit().get_tools(),
     ]
 
     # 配置智能体角色和参数

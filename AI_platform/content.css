@@ -1,3 +1,11 @@
+/* * @FileDescription: 插件内容样式
+* @Author: 胡皓文
+* @Date: 2025-04-01
+* @LastEditors: 胡皓文
+* @LastEditTime: 2025-04-01
+* @Contributors: 胡皓文  */
+
+
 /* 这里添加你的CSS样式 */
 .extension-highlight {
   border: 2px solid red !important;

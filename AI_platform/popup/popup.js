@@ -1,3 +1,11 @@
+// * @FileDescription: 行为采集与指令生成插件
+// * @Author: 胡皓文
+// * @Date: 2025-04-01
+// * @LastEditors: 胡皓文
+// * @LastEditTime: 2025-04-05
+// * @Contributors: 胡皓文，范起豪 
+
+
 document.addEventListener('DOMContentLoaded', function() {
   // 获取DOM元素
   const captureButton = document.getElementById('captureAndGenerate');
@@ -35,17 +43,16 @@ document.addEventListener('DOMContentLoaded', function() {
 5. 如果截图是产品页面，提取产品的具体名称、型号和特点，生成"请你比较[具体产品名称][型号]与其他同类产品的区别"
 
 直接输出一句话指令，不要有任何解释或前缀。指令必须包含截图中的具体文字信息，避免使用泛泛的描述。` },
-    { name: '编程问题', prompt: '请描述编程问题的具体要求...', qwenPrompt: `你是一个编程问题分析助手。请仔细分析这个编程相关网页截图，提取其中的代码、算法或问题描述，然后生成一个具体的指令给Owl模型。
+    { name: '文档助手', prompt: '请描述文档的具体内容...', qwenPrompt: `你是一个网页内容分析助手。请简洁分析这个网页截图，识别其所属领域和主要内容。
 
 指令生成规则：
-1. 识别截图中的编程语言、算法名称、数据结构或问题描述
-2. 如果是LeetCode等题目，提取题目编号、名称和具体要求
-3. 如果是代码片段，识别代码的功能、可能的bug或优化点
-4. 如果是API文档，提取API名称、参数和用法
+1. 识别截图中的网页所属领域（如编程、技术文档、新闻等）
+2. 简要概括网页的主要内容
+3. 保持极度简洁，不超过一句话
 
-生成的指令格式应为：请你解释如何[实现/解决/优化][具体问题]，要求是[具体技术要求]
+生成的指令格式应为：考虑[领域]的[主要内容]
 
-直接输出一句话指令，不要有任何解释或前缀。指令必须包含截图中的具体技术信息，避免使用泛泛的描述。` },
+直接输出一句话指令，不要有任何解释或前缀。` },
     { name: '学术论文', prompt: '请描述学术论文的标题或关键发现...', qwenPrompt: `你是一个学术论文分析助手。请仔细分析这个学术论文相关网页截图，提取其中的论文标题、作者、摘要或关键发现，然后生成一个具体的指令给Owl模型。
 
 指令生成规则：
@@ -78,7 +85,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
 生成的指令应包含产品的具体名称、型号和关键特点，例如：这是[产品名称][型号]，[关键特点]
 
-直接输出一句话指令，不要有任何引号、解释或前缀。指令必须包含截图中的具体产品信息，避免使用泛泛的描述。` }
+直接输出一句话指令，不要有任何引号、解释或前缀。指令必须包含截图中的具体产品信息，避免使用泛泛的描述。` },
+      { name: '旅行助手', prompt: '请描述旅行目的地和具体行程...', qwenPrompt: `你是一个旅行助手。请仔细分析这个旅行相关网页截图，提取其中的旅行目的地或景点信息，然后生成一个具体的指令给Owl模型。
+
+指令生成规则：
+1. 优先识别截图中的目的地名称或具体景点名称
+2. 这个目的地的所属地区是哪里
+3. 如果截图包含日期信息，将其纳入指令中
+4. 如果截图包含交通方式或住宿信息，也将其纳入指令中
+5. 如果截图是关于特定景点的详情，则重点关注该景点的特色和亮点
+
+生成的指令应简洁明了，仅包含截图中实际存在的信息以及这个目的地的所属地区是哪里，例如：
+- 如果只有目的地："请介绍[所在地级市][目的地名称]的旅游攻略和必游景点"
+- 如果有更多信息："请提供[所在地级市][目的地名称][具体日期]旅行的建议，包括[已知的交通/住宿信息]"
+
+直接输出一句话指令，不要有任何引号、解释或前缀。` }
   ];
 
   // 从存储中加载场景并填充下拉框
@@ -264,8 +285,8 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // 新任务按钮
   newTaskButton.addEventListener('click', function() {
-    // 获取当前选择的场景索引
-    const selectedSceneIndex = sceneSelector.value;
+    // 将场景选择器设置为默认场景（通常是索引0）
+    sceneSelector.value = '0';
     
     // 清空当前结果
     instructionResult.disabled = false;
@@ -275,19 +296,19 @@ document.addEventListener('DOMContentLoaded', function() {
     userTaskInput.value = '';
     
     // 如果当前有选择的场景，恢复该场景的提示内容
-    if (selectedSceneIndex !== '') {
-      const selectedScene = scenes[selectedSceneIndex];
+    const selectedScene = scenes[0]; // 使用默认场景
+    if (selectedScene) {
       userTaskInput.value = selectedScene.prompt; // 填充补充说明
     }
     
     // 清除存储的当前指令
     chrome.storage.local.remove(['currentInstruction']);
     
-    // 更新状态，保留场景选择
+    // 更新状态，场景选择改为默认
     saveState({
       hasResult: false,
       instruction: null,
-      selectedSceneIndex: selectedSceneIndex
+      selectedSceneIndex: '0'
     });
   });
 
@@ -349,6 +370,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 使用阿里云DashScope API (OpenAI兼容模式)
     const apiUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
     const apiKey = 'sk-85b3232583484cd68b1474832810edaa'; // 您的API密钥
+    // const apiKey = 'YOUR-API-KEY'; // 您的API密钥
     
     // 修正请求格式
     const requestData = {
@@ -523,8 +545,8 @@ document.addEventListener('DOMContentLoaded', function() {
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       const currentUrl = tabs[0].url;
       
-      // 如果是学术论文场景，先保存URL
-      if (selectedScene && selectedScene.name === '学术论文') {
+      // 如果是学术论文或文档助手场景，先保存URL
+      if (selectedScene && (selectedScene.name === '学术论文' || selectedScene.name === '文档助手')) {
         // 先保存URL
         fetch('http://localhost:7861/api/save_url', {
           method: 'POST',
@@ -547,7 +569,7 @@ document.addEventListener('DOMContentLoaded', function() {
           sendInstructionToOwlAPI(finalInstruction, sceneName);
         });
       } else {
-        // 不是学术论文场景，直接发送指令
+        // 不是需要保存URL的场景，直接发送指令
         sendInstructionToOwlAPI(finalInstruction, sceneName);
       }
     });
@@ -607,11 +629,14 @@ document.addEventListener('DOMContentLoaded', function() {
   function saveState(state) {
     // 获取当前选择的场景索引
     const selectedSceneIndex = sceneSelector.value;
+    // 获取当前用户输入的提示内容
+    const userPrompt = userTaskInput.value;
     
-    // 合并传入的状态和场景索引
+    // 合并传入的状态、场景索引和用户提示
     const fullState = {
       ...state,
-      selectedSceneIndex: selectedSceneIndex
+      selectedSceneIndex: selectedSceneIndex,
+      userPrompt: userPrompt // 新增：保存用户输入的提示内容
     };
     
     chrome.storage.local.set({ popupState: fullState });
@@ -628,8 +653,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (state.selectedSceneIndex !== undefined) {
           sceneSelector.value = state.selectedSceneIndex;
           
-          // 如果没有结果，则填充场景的提示内容
-          if (!state.hasResult && state.selectedSceneIndex !== '') {
+          // 如果保存了用户提示，则恢复用户提示
+          if (state.userPrompt !== undefined) {
+            userTaskInput.value = state.userPrompt;
+          }
+          // 如果没有保存用户提示且没有结果，则填充场景的默认提示内容
+          else if (!state.hasResult && state.selectedSceneIndex !== '') {
             const selectedScene = scenes[state.selectedSceneIndex];
             if (selectedScene) {
               userTaskInput.value = selectedScene.prompt;

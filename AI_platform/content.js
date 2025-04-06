@@ -1,3 +1,11 @@
+// * @FileDescription: 插件内容脚本
+// * @Author: 胡皓文
+// * @Date: 2025-04-01
+// * @LastEditors: 胡皓文
+// * @LastEditTime: 2025-04-01
+// * @Contributors: 胡皓文 
+
+
 // 监听DOM变化 - 添加错误处理
 /*
 const observer = new MutationObserver(mutations => {

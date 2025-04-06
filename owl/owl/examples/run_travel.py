@@ -1,16 +1,11 @@
-# ========= Copyright 2023-2024 @ CAMEL-AI.org. All Rights Reserved. =========
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ========= Copyright 2023-2024 @ CAMEL-AI.org. All Rights Reserved. =========
+"""
+    * @FileDescription: 旅行助手脚本
+    * @Author: 胡皓文
+    * @Date: 2025-04-03
+    * @LastEditors: 胡皓文
+    * @LastEditTime: 2025-04-06
+    * @Contributors: 胡皓文
+"""
 
 import sys
 import os
@@ -131,7 +126,7 @@ def construct_society(question: str) -> RolePlaying:
 4. 推荐符合用户需求的住宿选择，包括位置、价格范围和设施
 
 处理流程指南：
-1. 首先使用搜索工具search_google获取目的地的最新旅游信息
+1. 首先使用搜索工具search_google获取目的地的最新旅游信息与相关旅游攻略，并提取出旅游攻略的URL，作为后续制定旅行攻略的参考
 2. 使用google_maps工具规划最佳路线和交通方案
 3. 使用weather_toolkit查询目的地所属地级市在指定日期的天气预报
 4. 对于推荐的景点，使用extract_document_content获取详细信息，并用ImageAnalysisToolkit分析相关图片
