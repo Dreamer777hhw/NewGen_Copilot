@@ -6,12 +6,15 @@
 
 ### Docker
 由于环境较大，因此此处给出交大网盘链接如下：
+
 分享内容: newgen-copilot.tar
+
 链接: https://pan.sjtu.edu.cn/web/share/b1f76ba37de301880b86212a5d48a75a, 提取码: 1557
 
 ```bash
 docker load -i newgen-copilot.tar
 docker run -p 7861:7861 -p 7865:7865 -p 7866:7866 -d newgen-copilot:latest
+```
 
 ### 项目结构
 
