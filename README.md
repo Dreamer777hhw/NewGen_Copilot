@@ -45,7 +45,7 @@ AI_platform/
 
 ### 安装依赖
 
-可以按照owl官方网站中的要求进行配置。
+可以按照owl官方网站，https://github.com/camel-ai/owl/blob/main/README_zh.md，中的要求进行配置。
 
 ### 关键文件说明
 
